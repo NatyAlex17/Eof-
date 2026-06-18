@@ -3,7 +3,7 @@
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
 # Branches that require PR
-PROTECTED_BRANCHES="^main$|^master$|^develop$|^release"
+PROTECTED_BRANCHES="^main$|^develop$|^release"
 
 if echo "$BRANCH" | grep -E "$PROTECTED_BRANCHES" > /dev/null; then
   echo "❌ Direct push to $BRANCH is not allowed."
