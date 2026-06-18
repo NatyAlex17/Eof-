@@ -16,7 +16,7 @@
     "db:migrate": "pnpm --filter ./apps/api prisma:migrate",
     "db:generate": "pnpm --filter ./apps/api prisma:generate",
     "db:seed": "pnpm --filter ./apps/api prisma:seed",
-    "prepare": "husky install",
+    "prepare": "husky",
     "lint-staged": "lint-staged",
     "commitlint": "commitlint --edit"
   },

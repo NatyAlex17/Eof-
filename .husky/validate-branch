@@ -1,0 +1,19 @@
+#!/bin/sh
+
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
+
+# Branches that require PR
+PROTECTED_BRANCHES="^main$|^master$|^develop$|^release"
+
+if echo "$BRANCH" | grep -E "$PROTECTED_BRANCHES" > /dev/null; then
+  echo "❌ Direct push to $BRANCH is not allowed."
+  echo "   Create a PR instead."
+  echo ""
+  echo "   Allowed direct pushes:"
+  echo "   - feature/*"
+  echo "   - fix/*"
+  echo "   - chore/*"
+  exit 1
+fi
+
+exit 0

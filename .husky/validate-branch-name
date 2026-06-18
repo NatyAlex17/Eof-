@@ -1,0 +1,26 @@
+#!/bin/sh
+
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
+
+# Allowed patterns
+VALID_BRANCH_REGEX="^(main|master|develop|feature|fix|chore|docs|hotfix|release)\/[a-z0-9-]+$|^main$|^master$|^develop$"
+
+if ! echo "$BRANCH" | grep -E "$VALID_BRANCH_REGEX" > /dev/null; then
+  echo "❌ Invalid branch name: $BRANCH"
+  echo ""
+  echo "   Allowed patterns:"
+  echo "   - feature/description-kebab-case"
+  echo "   - fix/description-kebab-case"
+  echo "   - chore/description-kebab-case"
+  echo "   - docs/description-kebab-case"
+  echo "   - hotfix/description-kebab-case"
+  echo "   - release/version-number"
+  echo ""
+  echo "   Examples:"
+  echo "   - feature/students-create-profile"
+  echo "   - fix/auth-token-refresh"
+  echo "   - chore/setup-sentry"
+  exit 1
+fi
+
+exit 0
