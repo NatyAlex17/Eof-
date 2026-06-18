@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "Node16",
+    "moduleResolution": "node16",
+    "types" : ["node", "jest"],
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "removeComments": true,
+    "noImplicitAny": false // NestJS likes loose typing in some areas
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "dist"]
+}

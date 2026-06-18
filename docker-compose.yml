@@ -1,0 +1,46 @@
+name: eof-mana
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: eof_mana_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: eof_mana
+    ports:
+      - "5432:5432"
+    volumes:
+      - eof_mana_postgres_data:/var/lib/postgresql/data
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: eof_mana_api
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    ports:
+      - "4000:4000"
+    env_file:
+      - apps/api/.env
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/eof_mana
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: eof_mana_web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "3000:3000"
+    env_file:
+      - apps/web/.env
+
+volumes:
+  eof_mana_postgres_data:

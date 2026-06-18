@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    // Universal
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "declaration": true,
+    "sourceMap": true,
+    "incremental": true,
+
+    // Strict baseline (both can override)
+    "strict": true,
+    "strictNullChecks": true,
+    "noImplicitAny": false,
+    "strictBindCallApply": false,
+    "noFallthroughCasesInSwitch": false,
+
+    // Paths are relative to this config file.
+    "paths": {
+      "@api/*": ["./apps/api/src/*"],
+      "@web/*": ["./apps/web/src/*"],
+      "@shared/*": ["./packages/shared/src/*"]
+    }
+  },
+  "exclude": ["node_modules", "dist", ".next"]
+}
