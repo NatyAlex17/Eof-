@@ -48,15 +48,55 @@ const colors = {
 export default function AllocationBoardPage() {
   const [location, setLocation] = useState<'SFO' | 'LAX'>('SFO');
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>('o1');
-  const [splitOpen, setSplitOpen] = useState(false);
-  const [splitBox, setSplitBox] = useState<{ lot: string; box: Box; wtA: number } | null>(null);
+  const [_splitOpen, _setSplitOpen] = useState(false);
+  const [_splitBox, _setSplitBox] = useState<{ lot: string; box: Box; wtA: number } | null>(null);
 
   // Sample data
   const orders: Order[] = [
-    { id: 'o1', customer: 'Nobu', code: 'NOBU', tier: 'Tier 1', carrier: 'Air Cargo', species: 'Ahi Tuna', target: 90, allocated: 80, color: colors.steel },
-    { id: 'o2', customer: 'Morimoto', code: 'MORI', tier: 'Tier 1', carrier: 'Air Cargo', species: 'Salmon', target: 60, allocated: 31, color: colors.sage },
-    { id: 'o3', customer: "Roy's", code: 'ROY', tier: 'Tier 2', carrier: 'Ground', species: 'Ono', target: 75, allocated: 0, color: colors.amber },
-    { id: 'o4', customer: "Alan Wong's", code: 'WONG', tier: 'Tier 2', carrier: 'Ground', species: 'Ahi Tuna', target: 45, allocated: 0, color: colors.slate },
+    {
+      id: 'o1',
+      customer: 'Nobu',
+      code: 'NOBU',
+      tier: 'Tier 1',
+      carrier: 'Air Cargo',
+      species: 'Ahi Tuna',
+      target: 90,
+      allocated: 80,
+      color: colors.steel,
+    },
+    {
+      id: 'o2',
+      customer: 'Morimoto',
+      code: 'MORI',
+      tier: 'Tier 1',
+      carrier: 'Air Cargo',
+      species: 'Salmon',
+      target: 60,
+      allocated: 31,
+      color: colors.sage,
+    },
+    {
+      id: 'o3',
+      customer: "Roy's",
+      code: 'ROY',
+      tier: 'Tier 2',
+      carrier: 'Ground',
+      species: 'Ono',
+      target: 75,
+      allocated: 0,
+      color: colors.amber,
+    },
+    {
+      id: 'o4',
+      customer: "Alan Wong's",
+      code: 'WONG',
+      tier: 'Tier 2',
+      carrier: 'Ground',
+      species: 'Ahi Tuna',
+      target: 45,
+      allocated: 0,
+      color: colors.slate,
+    },
   ];
 
   const lots: Lot[] = [
@@ -67,12 +107,66 @@ export default function AllocationBoardPage() {
       species: 'Ahi Tuna',
       grade: 'A+',
       boxes: [
-        { id: 'b1', n: 'B-4471', idx: 1, weight: 42.6, species: 'Ahi Tuna', assignedTo: 'o1', split: null, locked: false },
-        { id: 'b2', n: 'B-4472', idx: 2, weight: 38.1, species: 'Ahi Tuna', assignedTo: 'o1', split: null, locked: false },
-        { id: 'b3', n: 'B-4473', idx: 3, weight: 40.2, species: 'Ahi Tuna', assignedTo: null, split: null, locked: false },
-        { id: 'b4', n: 'B-4474', idx: 4, weight: 44.0, species: 'Ahi Tuna', assignedTo: null, split: null, locked: false },
-        { id: 'b5', n: 'B-4475', idx: 5, weight: 39.5, species: 'Ahi Tuna', assignedTo: null, split: null, locked: false },
-        { id: 'b6', n: 'B-4476', idx: 6, weight: 41.8, species: 'Ahi Tuna', assignedTo: null, split: null, locked: false },
+        {
+          id: 'b1',
+          n: 'B-4471',
+          idx: 1,
+          weight: 42.6,
+          species: 'Ahi Tuna',
+          assignedTo: 'o1',
+          split: null,
+          locked: false,
+        },
+        {
+          id: 'b2',
+          n: 'B-4472',
+          idx: 2,
+          weight: 38.1,
+          species: 'Ahi Tuna',
+          assignedTo: 'o1',
+          split: null,
+          locked: false,
+        },
+        {
+          id: 'b3',
+          n: 'B-4473',
+          idx: 3,
+          weight: 40.2,
+          species: 'Ahi Tuna',
+          assignedTo: null,
+          split: null,
+          locked: false,
+        },
+        {
+          id: 'b4',
+          n: 'B-4474',
+          idx: 4,
+          weight: 44.0,
+          species: 'Ahi Tuna',
+          assignedTo: null,
+          split: null,
+          locked: false,
+        },
+        {
+          id: 'b5',
+          n: 'B-4475',
+          idx: 5,
+          weight: 39.5,
+          species: 'Ahi Tuna',
+          assignedTo: null,
+          split: null,
+          locked: false,
+        },
+        {
+          id: 'b6',
+          n: 'B-4476',
+          idx: 6,
+          weight: 41.8,
+          species: 'Ahi Tuna',
+          assignedTo: null,
+          split: null,
+          locked: false,
+        },
       ],
     },
     {
@@ -82,14 +176,42 @@ export default function AllocationBoardPage() {
       species: 'Salmon',
       grade: 'A',
       boxes: [
-        { id: 'b7', n: 'B-4520', idx: 1, weight: 31.2, species: 'Salmon', assignedTo: 'o2', split: null, locked: false },
-        { id: 'b8', n: 'B-4521', idx: 2, weight: 33.5, species: 'Salmon', assignedTo: null, split: null, locked: false },
-        { id: 'b9', n: 'B-4522', idx: 3, weight: 29.8, species: 'Salmon', assignedTo: null, split: null, locked: false },
+        {
+          id: 'b7',
+          n: 'B-4520',
+          idx: 1,
+          weight: 31.2,
+          species: 'Salmon',
+          assignedTo: 'o2',
+          split: null,
+          locked: false,
+        },
+        {
+          id: 'b8',
+          n: 'B-4521',
+          idx: 2,
+          weight: 33.5,
+          species: 'Salmon',
+          assignedTo: null,
+          split: null,
+          locked: false,
+        },
+        {
+          id: 'b9',
+          n: 'B-4522',
+          idx: 3,
+          weight: 29.8,
+          species: 'Salmon',
+          assignedTo: null,
+          split: null,
+          locked: false,
+        },
       ],
     },
   ];
 
-  const getOrderColor = (orderId: string | null) => orders.find((o) => o.id === orderId)?.color || '#CCCCCC';
+  const getOrderColor = (orderId: string | null) =>
+    orders.find((o) => o.id === orderId)?.color || '#CCCCCC';
   const getOrderCode = (orderId: string | null) => orders.find((o) => o.id === orderId)?.code || '';
 
   return (
@@ -121,7 +243,14 @@ export default function AllocationBoardPage() {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
-            <span style={{ fontSize: '15px', fontWeight: 700, letterSpacing: '-0.01em', whiteSpace: 'nowrap' }}>
+            <span
+              style={{
+                fontSize: '15px',
+                fontWeight: 700,
+                letterSpacing: '-0.01em',
+                whiteSpace: 'nowrap',
+              }}
+            >
               Allocation Board
             </span>
             <span style={{ width: '1px', height: '16px', background: '#E2E6E9' }}></span>
@@ -143,6 +272,7 @@ export default function AllocationBoardPage() {
                 {orders.slice(0, 3).map((o) => (
                   <span
                     key={o.id}
+                    title={o.customer}
                     style={{
                       width: '24px',
                       height: '24px',
@@ -156,14 +286,19 @@ export default function AllocationBoardPage() {
                       justifyContent: 'center',
                       marginLeft: '-8px',
                       border: '2px solid #fff',
-                      title: o.customer,
                     }}
                   >
                     {o.code[0]}
                   </span>
                 ))}
               </div>
-              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '11px', color: '#8A99A3' }}>
+              <span
+                style={{
+                  fontFamily: "'IBM Plex Mono', monospace",
+                  fontSize: '11px',
+                  color: '#8A99A3',
+                }}
+              >
                 3 online
               </span>
             </div>
@@ -232,7 +367,10 @@ export default function AllocationBoardPage() {
           >
             <span>{lots.reduce((a, l) => a + l.boxes.length, 0)} orders</span>
             <span style={{ width: '1px', height: '14px', background: '#E2E6E9' }}></span>
-            <span>{lots.reduce((a, l) => a + l.boxes.reduce((b, bx) => b + bx.weight, 0), 0).toFixed(1)} lb</span>
+            <span>
+              {lots.reduce((a, l) => a + l.boxes.reduce((b, bx) => b + bx.weight, 0), 0).toFixed(1)}{' '}
+              lb
+            </span>
             <span style={{ width: '1px', height: '14px', background: '#E2E6E9' }}></span>
             <span style={{ color: '#3F7D5B' }}>● live · synced 2s ago</span>
           </div>
@@ -273,7 +411,13 @@ export default function AllocationBoardPage() {
               >
                 OPEN ORDERS
               </span>
-              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '11px', color: '#8A99A3' }}>
+              <span
+                style={{
+                  fontFamily: "'IBM Plex Mono', monospace",
+                  fontSize: '11px',
+                  color: '#8A99A3',
+                }}
+              >
                 {orders.length}
               </span>
             </div>
@@ -296,14 +440,22 @@ export default function AllocationBoardPage() {
                     onClick={() => setSelectedOrderId(o.id)}
                     style={{
                       background: selectedOrderId === o.id ? '#fff' : '#F4F5F6',
-                      border: selectedOrderId === o.id ? `2px solid ${o.color}` : '1px solid #D6DCE0',
+                      border:
+                        selectedOrderId === o.id ? `2px solid ${o.color}` : '1px solid #D6DCE0',
                       borderRadius: '6px',
                       padding: '12px',
                       cursor: 'pointer',
                       transition: 'all 0.15s',
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px' }}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        justifyContent: 'space-between',
+                        gap: '10px',
+                      }}
+                    >
                       <div style={{ minWidth: 0 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <span
@@ -336,7 +488,14 @@ export default function AllocationBoardPage() {
                           fontSize: '12px',
                           fontWeight: 600,
                           color: o.color,
-                          background: 'rgba(' + parseInt(o.color.slice(1, 3), 16) + ',' + parseInt(o.color.slice(3, 5), 16) + ',' + parseInt(o.color.slice(5, 7), 16) + ', 0.1)',
+                          background:
+                            'rgba(' +
+                            parseInt(o.color.slice(1, 3), 16) +
+                            ',' +
+                            parseInt(o.color.slice(3, 5), 16) +
+                            ',' +
+                            parseInt(o.color.slice(5, 7), 16) +
+                            ', 0.1)',
                           borderRadius: '3px',
                           padding: '4px 8px',
                         }}
@@ -344,8 +503,18 @@ export default function AllocationBoardPage() {
                         {allocPct.toFixed(0)}%
                       </span>
                     </div>
-                    <div style={{ height: '7px', background: '#EDEFF1', borderRadius: '2px', overflow: 'hidden', marginTop: '13px' }}>
-                      <div style={{ width: `${allocPct}%`, height: '100%', background: o.color }}></div>
+                    <div
+                      style={{
+                        height: '7px',
+                        background: '#EDEFF1',
+                        borderRadius: '2px',
+                        overflow: 'hidden',
+                        marginTop: '13px',
+                      }}
+                    >
+                      <div
+                        style={{ width: `${allocPct}%`, height: '100%', background: o.color }}
+                      ></div>
                     </div>
                     <div
                       style={{
@@ -361,7 +530,12 @@ export default function AllocationBoardPage() {
                       <span>
                         {o.allocated} / {o.target}
                       </span>
-                      <span style={{ fontSize: '11px', color: o.allocated >= o.target ? '#3F7D5B' : '#8A99A3' }}>
+                      <span
+                        style={{
+                          fontSize: '11px',
+                          color: o.allocated >= o.target ? '#3F7D5B' : '#8A99A3',
+                        }}
+                      >
                         {o.allocated >= o.target ? '✓ Full' : `${o.target - o.allocated} needed`}
                       </span>
                     </div>
@@ -407,7 +581,8 @@ export default function AllocationBoardPage() {
                 </span>
                 {selectedOrderId && (
                   <span style={{ fontSize: '12px', color: '#8A99A3' }}>
-                    — click a box to assign to <span style={{ color: getOrderColor(selectedOrderId), fontWeight: 600 }}>
+                    — click a box to assign to{' '}
+                    <span style={{ color: getOrderColor(selectedOrderId), fontWeight: 600 }}>
                       {getOrderCode(selectedOrderId)}
                     </span>
                   </span>
@@ -462,13 +637,19 @@ export default function AllocationBoardPage() {
                     </div>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '9px' }}>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
+                      gap: '9px',
+                    }}
+                  >
                     {lot.boxes.map((box) => (
                       <div
                         key={box.id}
                         onClick={() => {
                           if (selectedOrderId) {
-                            const boxWithLot = { ...box };
+                            const _boxWithLot = { ...box };
                             // In a real app, this would update state
                           }
                         }}
@@ -489,7 +670,14 @@ export default function AllocationBoardPage() {
                           if (!box.assignedTo) e.currentTarget.style.borderColor = '#D6DCE0';
                         }}
                       >
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: '6px',
+                          }}
+                        >
                           <span
                             style={{
                               fontFamily: "'IBM Plex Mono', monospace",
@@ -523,7 +711,9 @@ export default function AllocationBoardPage() {
                             marginTop: '9px',
                           }}
                         >
-                          <span style={{ fontSize: '11px', color: '#8A99A3', fontWeight: 500 }}>#{box.idx}</span>
+                          <span style={{ fontSize: '11px', color: '#8A99A3', fontWeight: 500 }}>
+                            #{box.idx}
+                          </span>
                           <span
                             style={{
                               fontFamily: "'IBM Plex Mono', monospace",
@@ -532,7 +722,10 @@ export default function AllocationBoardPage() {
                             }}
                           >
                             {box.weight}
-                            <span style={{ fontSize: '11px', color: '#8A99A3', fontWeight: 500 }}> lb</span>
+                            <span style={{ fontSize: '11px', color: '#8A99A3', fontWeight: 500 }}>
+                              {' '}
+                              lb
+                            </span>
                           </span>
                         </div>
                       </div>
