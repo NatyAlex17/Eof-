@@ -269,26 +269,30 @@ export default function PickSlipsPage() {
                 borderBottom: '2px solid #222A30',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '22px' }}>
                 <div
                   style={{
-                    width: '36px',
-                    height: '36px',
-                    border: '2px solid #222A30',
-                    borderRadius: '3px',
+                    width: '80px',
+                    height: '72px',
+                    borderRadius: '6px',
+                    overflow: 'hidden',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
+                    flex: 'none',
                   }}
                 >
-                  <div
+                  <img
+                    src="/logo.png"
+                    alt="MANA"
                     style={{
-                      width: '13px',
-                      height: '13px',
-                      border: '2px solid #3F6F86',
-                      borderRadius: '1px',
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                      objectPosition: 'center',
+                      transform: 'scale(1.2)',
                     }}
-                  ></div>
+                  />
                 </div>
                 <div>
                   <div
@@ -340,7 +344,14 @@ export default function PickSlipsPage() {
             </div>
 
             {/* META GRID */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', gap: 0, borderBottom: '1px solid #E2E6E9' }}>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1.4fr 1fr 1fr',
+                gap: 0,
+                borderBottom: '1px solid #E2E6E9',
+              }}
+            >
               <div
                 style={{
                   padding: '20px 44px 20px',
@@ -730,6 +741,21 @@ export default function PickSlipsPage() {
               >
                 {statusMeta.stamp}
               </div>
+              {slip.status === 'locked' && (
+                <div
+                  style={{
+                    fontSize: '9px',
+                    color: '#8A99A3',
+                    marginTop: '8px',
+                    textAlign: 'center',
+                    fontWeight: 500,
+                    transform: 'rotate(-9deg)',
+                    transformOrigin: 'center',
+                  }}
+                >
+                  Generated: Jun 23 06:14
+                </div>
+              )}
             </div>
           </div>
         </div>

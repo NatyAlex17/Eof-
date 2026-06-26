@@ -22,7 +22,9 @@ interface Lot {
 }
 
 export default function InventoryPage() {
-  const [filter, setFilter] = useState<'all' | 'received' | 'available' | 'allocated' | 'shipped'>('all');
+  const [filter, setFilter] = useState<'all' | 'received' | 'available' | 'allocated' | 'shipped'>(
+    'all'
+  );
   const [expanded, setExpanded] = useState<Record<string, boolean>>({ 'LOT-2207': true });
   const [importOpen, setImportOpen] = useState(false);
 
@@ -94,8 +96,7 @@ export default function InventoryPage() {
     shipped: { label: 'Shipped', color: '#5A6670', bg: '#EEF0F2', dot: '#8A99A3' },
   };
 
-  const filteredLots =
-    filter === 'all' ? lotData : lotData.filter((l) => l.status === filter);
+  const filteredLots = filter === 'all' ? lotData : lotData.filter((l) => l.status === filter);
 
   const toggleExpanded = (lot: string) => {
     setExpanded((prev) => ({ ...prev, [lot]: !prev[lot] }));
@@ -278,7 +279,9 @@ export default function InventoryPage() {
                       (e.currentTarget as HTMLElement).style.background = '#FAFBFB';
                     }}
                     onMouseOut={(e) => {
-                      (e.currentTarget as HTMLElement).style.background = isExpanded ? '#FAFBFB' : 'transparent';
+                      (e.currentTarget as HTMLElement).style.background = isExpanded
+                        ? '#FAFBFB'
+                        : 'transparent';
                     }}
                   >
                     <span
@@ -366,7 +369,13 @@ export default function InventoryPage() {
                   {/* EXPANDED BOXES */}
                   {isExpanded && (
                     <div style={{ padding: '4px 18px 18px 48px', background: '#FAFBFB' }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(168px, 1fr))', gap: '8px' }}>
+                      <div
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(auto-fill, minmax(168px, 1fr))',
+                          gap: '8px',
+                        }}
+                      >
                         {lot.boxes.map((box) => (
                           <div
                             key={box.n}
@@ -427,7 +436,12 @@ export default function InventoryPage() {
                                 }}
                               >
                                 {box.weight}
-                                <span style={{ fontSize: '10px', color: '#8A99A3', fontWeight: 500 }}> lb</span>
+                                <span
+                                  style={{ fontSize: '10px', color: '#8A99A3', fontWeight: 500 }}
+                                >
+                                  {' '}
+                                  lb
+                                </span>
                               </span>
                             </div>
                           </div>
@@ -558,6 +572,7 @@ export default function InventoryPage() {
                   Cancel
                 </button>
                 <button
+                  onClick={() => setImportOpen(false)}
                   style={{
                     fontFamily: "'Archivo', sans-serif",
                     fontSize: '13px',

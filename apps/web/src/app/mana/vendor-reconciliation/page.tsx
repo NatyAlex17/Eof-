@@ -25,9 +25,15 @@ interface DocData {
 
 export default function VendorReconciliationPage() {
   const [tab, setTab] = useState<VendorTab>('kona');
+  const [emailSent, setEmailSent] = useState(false);
 
   const print = () => {
     window.print();
+  };
+
+  const emailVendor = () => {
+    setEmailSent(true);
+    setTimeout(() => setEmailSent(false), 2500);
   };
 
   const docs: Record<VendorTab, DocData> = {
@@ -204,6 +210,7 @@ export default function VendorReconciliationPage() {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <button
+              onClick={emailVendor}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -211,28 +218,43 @@ export default function VendorReconciliationPage() {
                 fontFamily: "'Archivo', sans-serif",
                 fontSize: '13px',
                 fontWeight: 600,
-                background: '#fff',
-                color: '#5A6670',
-                border: '1px solid #D6DCE0',
+                background: emailSent ? '#EAF1ED' : '#fff',
+                color: emailSent ? '#2E6347' : '#5A6670',
+                border: `1px solid ${emailSent ? '#BFD8C9' : '#D6DCE0'}`,
                 borderRadius: '5px',
                 padding: '9px 14px',
                 cursor: 'pointer',
               }}
             >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M4 6l8 6 8-6" />
-                <rect x="3" y="5" width="18" height="14" rx="2" />
-              </svg>
-              Email vendor
+              {emailSent ? (
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M5 12l4 4 10-10" />
+                </svg>
+              ) : (
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M4 6l8 6 8-6" />
+                  <rect x="3" y="5" width="18" height="14" rx="2" />
+                </svg>
+              )}
+              {emailSent ? 'Sent to vendor' : 'Email vendor'}
             </button>
             <button
               onClick={print}
@@ -302,26 +324,30 @@ export default function VendorReconciliationPage() {
                 borderBottom: '2px solid #222A30',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '22px' }}>
                 <div
                   style={{
-                    width: '36px',
-                    height: '36px',
-                    border: '2px solid #222A30',
-                    borderRadius: '3px',
+                    width: '80px',
+                    height: '72px',
+                    borderRadius: '6px',
+                    overflow: 'hidden',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
+                    flex: 'none',
                   }}
                 >
-                  <div
+                  <img
+                    src="/logo.png"
+                    alt="MANA"
                     style={{
-                      width: '13px',
-                      height: '13px',
-                      border: '2px solid #3F6F86',
-                      borderRadius: '1px',
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                      objectPosition: 'center',
+                      transform: 'scale(1.2)',
                     }}
-                  ></div>
+                  />
                 </div>
                 <div>
                   <div
@@ -644,9 +670,7 @@ export default function VendorReconciliationPage() {
                     >
                       {cr.box}
                     </span>
-                    <span style={{ fontSize: '13px', color: '#5A6670' }}>
-                      {cr.reason}
-                    </span>
+                    <span style={{ fontSize: '13px', color: '#5A6670' }}>{cr.reason}</span>
                     <span
                       style={{
                         fontFamily: "'IBM Plex Mono', monospace",

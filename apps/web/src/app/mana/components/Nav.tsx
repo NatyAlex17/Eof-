@@ -7,10 +7,16 @@ type NavPage =
   | 'board'
   | 'intake'
   | 'inventory'
+  | 'customers'
   | 'pickslip'
   | 'finance'
+  | 'credits'
   | 'vendor'
-  | 'dashboard';
+  | 'opsdash'
+  | 'findash'
+  | 'dashboard'
+  | 'notifications'
+  | 'admin';
 
 export default function Nav() {
   const pathname = usePathname();
@@ -20,10 +26,16 @@ export default function Nav() {
     if (pathname.includes('/allocation-board')) return 'board';
     if (pathname.includes('/order-intake')) return 'intake';
     if (pathname.includes('/inventory')) return 'inventory';
+    if (pathname.includes('/customers')) return 'customers';
     if (pathname.includes('/pick-slips')) return 'pickslip';
     if (pathname.includes('/finance-queue')) return 'finance';
+    if (pathname.includes('/credits')) return 'credits';
     if (pathname.includes('/vendor-reconciliation')) return 'vendor';
+    if (pathname.includes('/operations-dashboard')) return 'opsdash';
+    if (pathname.includes('/finance-dashboard')) return 'findash';
     if (pathname.includes('/ceo-dashboard')) return 'dashboard';
+    if (pathname.includes('/notifications')) return 'notifications';
+    if (pathname.includes('/admin')) return 'admin';
     return 'board';
   };
 
@@ -67,31 +79,34 @@ export default function Nav() {
           flex: 'none',
           display: 'flex',
           alignItems: 'center',
-          gap: '12px',
+          gap: '18px',
           padding: '18px 18px 16px',
           borderBottom: '1px solid #E2E6E9',
         }}
       >
         <div
           style={{
-            width: '32px',
-            height: '32px',
-            border: '2px solid #222A30',
-            borderRadius: '3px',
+            width: '60px',
+            height: '56px',
+            borderRadius: '6px',
+            overflow: 'hidden',
+            flex: 'none',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            flex: 'none',
           }}
         >
-          <div
+          <img
+            src="/logo.png"
+            alt="MANA"
             style={{
-              width: '12px',
-              height: '12px',
-              border: '2px solid #3F6F86',
-              borderRadius: '1px',
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              objectPosition: 'center',
+              transform: 'scale(1.2)',
             }}
-          ></div>
+          />
         </div>
         <div>
           <div
@@ -178,6 +193,24 @@ export default function Nav() {
           </svg>
           <span>Lots &amp; Inventory</span>
         </Link>
+        <Link href="/mana/customers" style={getLinkStyle('customers')}>
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <circle cx="9" cy="8" r="3.2" />
+            <path d="M3.5 19c0-3 2.5-5 5.5-5s5.5 2 5.5 5" />
+            <path d="M16 5.2a3 3 0 010 5.6" />
+            <path d="M17.5 14c2.2.5 3.5 2.3 3.5 5" />
+          </svg>
+          <span>Customers</span>
+        </Link>
         <Link href="/mana/pick-slips" style={getLinkStyle('pickslip')}>
           <svg
             width="18"
@@ -226,10 +259,24 @@ export default function Nav() {
           </svg>
           <span>Finance Queue</span>
         </Link>
-        <Link
-          href="/mana/vendor-reconciliation"
-          style={getLinkStyle('vendor')}
-        >
+        <Link href="/mana/credits" style={getLinkStyle('credits')}>
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <rect x="3" y="8" width="18" height="13" rx="1.5" />
+            <path d="M7 8V6a5 5 0 0110 0v2" />
+            <line x1="12" y1="13" x2="12" y2="16" />
+          </svg>
+          <span>Credits &amp; Downgrades</span>
+        </Link>
+        <Link href="/mana/vendor-reconciliation" style={getLinkStyle('vendor')}>
           <svg
             width="18"
             height="18"
@@ -260,6 +307,43 @@ export default function Nav() {
           OVERVIEW
         </div>
 
+        <Link href="/mana/operations-dashboard" style={getLinkStyle('opsdash')}>
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M3 13a9 9 0 0118 0" />
+            <line x1="12" y1="13" x2="15.5" y2="9.5" />
+            <line x1="3" y1="13" x2="5" y2="13" />
+            <line x1="19" y1="13" x2="21" y2="13" />
+            <line x1="12" y1="4" x2="12" y2="6" />
+          </svg>
+          <span>Operations</span>
+        </Link>
+        <Link href="/mana/finance-dashboard" style={getLinkStyle('findash')}>
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <line x1="4" y1="20" x2="20" y2="20" />
+            <rect x="5.5" y="11" width="3.5" height="7" rx="0.5" />
+            <rect x="10.5" y="7" width="3.5" height="11" rx="0.5" />
+            <rect x="15.5" y="13" width="3.5" height="5" rx="0.5" />
+          </svg>
+          <span>Finance</span>
+        </Link>
         <Link href="/mana/ceo-dashboard" style={getLinkStyle('dashboard')}>
           <svg
             width="18"
@@ -274,7 +358,55 @@ export default function Nav() {
             <rect x="3" y="13.5" width="7.5" height="7.5" rx="1" />
             <rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1" />
           </svg>
-          <span>CEO Dashboard</span>
+          <span>Executive</span>
+        </Link>
+
+        <div
+          style={{
+            fontFamily: "'IBM Plex Mono', monospace",
+            fontSize: '9px',
+            letterSpacing: '0.14em',
+            color: '#8A99A3',
+            padding: '0 18px',
+            margin: '18px 0 8px',
+          }}
+        >
+          SYSTEM
+        </div>
+
+        <Link href="/mana/notifications" style={getLinkStyle('notifications')}>
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+            <path d="M13.7 21a2 2 0 01-3.4 0" />
+          </svg>
+          <span>Notifications</span>
+        </Link>
+        <Link href="/mana/admin" style={getLinkStyle('admin')}>
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <circle cx="12" cy="8" r="4" />
+            <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
+            <circle cx="19" cy="8" r="2" />
+            <line x1="19" y1="6" x2="19" y2="10" />
+          </svg>
+          <span>Admin</span>
         </Link>
       </nav>
 
@@ -306,15 +438,57 @@ export default function Nav() {
         >
           BK
         </span>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: '13px', fontWeight: 600, lineHeight: 1.1 }}>
-            Blake
-          </div>
-          <div style={{ fontSize: '11px', color: '#8A99A3', marginTop: '2px' }}>
-            Owner · SFO
-          </div>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ fontSize: '13px', fontWeight: 600, lineHeight: 1.1 }}>Blake</div>
+          <div style={{ fontSize: '11px', color: '#8A99A3', marginTop: '2px' }}>Owner · SFO</div>
         </div>
       </div>
     </div>
   );
 }
+
+{
+  /* logout */
+}
+<div style={{ flex: 'none', padding: '0 10px 12px' }}>
+  <a
+    href="/login"
+    style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: '9px',
+      padding: '8px 10px',
+      borderRadius: '6px',
+      color: '#8A99A3',
+      textDecoration: 'none',
+      fontSize: '12px',
+      fontWeight: 500,
+      cursor: 'pointer',
+      transition: 'background 0.12s, color 0.12s',
+    }}
+    onMouseEnter={(e) => {
+      (e.currentTarget as HTMLAnchorElement).style.background = '#FBF0EF';
+      (e.currentTarget as HTMLAnchorElement).style.color = '#A5362C';
+    }}
+    onMouseLeave={(e) => {
+      (e.currentTarget as HTMLAnchorElement).style.background = 'transparent';
+      (e.currentTarget as HTMLAnchorElement).style.color = '#8A99A3';
+    }}
+  >
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+      <polyline points="16 17 21 12 16 7" />
+      <line x1="21" y1="12" x2="9" y2="12" />
+    </svg>
+    Sign out
+  </a>
+</div>;
