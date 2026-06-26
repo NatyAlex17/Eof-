@@ -79,31 +79,34 @@ export default function Nav() {
           flex: 'none',
           display: 'flex',
           alignItems: 'center',
-          gap: '12px',
+          gap: '18px',
           padding: '18px 18px 16px',
           borderBottom: '1px solid #E2E6E9',
         }}
       >
         <div
           style={{
-            width: '32px',
-            height: '32px',
-            border: '2px solid #222A30',
-            borderRadius: '3px',
+            width: '60px',
+            height: '56px',
+            borderRadius: '6px',
+            overflow: 'hidden',
+            flex: 'none',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            flex: 'none',
           }}
         >
-          <div
+          <img
+            src="/logo.png"
+            alt="MANA"
             style={{
-              width: '12px',
-              height: '12px',
-              border: '2px solid #3F6F86',
-              borderRadius: '1px',
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              objectPosition: 'center',
+              transform: 'scale(1.2)',
             }}
-          ></div>
+          />
         </div>
         <div>
           <div
@@ -435,7 +438,7 @@ export default function Nav() {
         >
           BK
         </span>
-        <div style={{ minWidth: 0 }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontSize: '13px', fontWeight: 600, lineHeight: 1.1 }}>Blake</div>
           <div style={{ fontSize: '11px', color: '#8A99A3', marginTop: '2px' }}>Owner · SFO</div>
         </div>
@@ -443,3 +446,49 @@ export default function Nav() {
     </div>
   );
 }
+
+{
+  /* logout */
+}
+<div style={{ flex: 'none', padding: '0 10px 12px' }}>
+  <a
+    href="/login"
+    style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: '9px',
+      padding: '8px 10px',
+      borderRadius: '6px',
+      color: '#8A99A3',
+      textDecoration: 'none',
+      fontSize: '12px',
+      fontWeight: 500,
+      cursor: 'pointer',
+      transition: 'background 0.12s, color 0.12s',
+    }}
+    onMouseEnter={(e) => {
+      (e.currentTarget as HTMLAnchorElement).style.background = '#FBF0EF';
+      (e.currentTarget as HTMLAnchorElement).style.color = '#A5362C';
+    }}
+    onMouseLeave={(e) => {
+      (e.currentTarget as HTMLAnchorElement).style.background = 'transparent';
+      (e.currentTarget as HTMLAnchorElement).style.color = '#8A99A3';
+    }}
+  >
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+      <polyline points="16 17 21 12 16 7" />
+      <line x1="21" y1="12" x2="9" y2="12" />
+    </svg>
+    Sign out
+  </a>
+</div>;

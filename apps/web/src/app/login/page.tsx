@@ -65,22 +65,25 @@ export default function LoginPage() {
         >
           <div
             style={{
-              width: '38px',
-              height: '38px',
-              border: '2px solid #222A30',
-              borderRadius: '4px',
+              width: '96px',
+              height: '96px',
+              borderRadius: '12px',
+              overflow: 'hidden',
+              flex: 'none',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              flex: 'none',
             }}
           >
-            <div
+            <img
+              src="/logo.png"
+              alt="MANA"
               style={{
-                width: '14px',
-                height: '14px',
-                border: '2px solid #3F6F86',
-                borderRadius: '2px',
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                objectPosition: 'center',
+                transform: 'scale(1.6)',
               }}
             />
           </div>

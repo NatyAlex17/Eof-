@@ -269,26 +269,30 @@ export default function PickSlipsPage() {
                 borderBottom: '2px solid #222A30',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '22px' }}>
                 <div
                   style={{
-                    width: '36px',
-                    height: '36px',
-                    border: '2px solid #222A30',
-                    borderRadius: '3px',
+                    width: '80px',
+                    height: '72px',
+                    borderRadius: '6px',
+                    overflow: 'hidden',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
+                    flex: 'none',
                   }}
                 >
-                  <div
+                  <img
+                    src="/logo.png"
+                    alt="MANA"
                     style={{
-                      width: '13px',
-                      height: '13px',
-                      border: '2px solid #3F6F86',
-                      borderRadius: '1px',
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                      objectPosition: 'center',
+                      transform: 'scale(1.2)',
                     }}
-                  ></div>
+                  />
                 </div>
                 <div>
                   <div
