@@ -340,7 +340,14 @@ export default function PickSlipsPage() {
             </div>
 
             {/* META GRID */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', gap: 0, borderBottom: '1px solid #E2E6E9' }}>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1.4fr 1fr 1fr',
+                gap: 0,
+                borderBottom: '1px solid #E2E6E9',
+              }}
+            >
               <div
                 style={{
                   padding: '20px 44px 20px',
@@ -730,6 +737,21 @@ export default function PickSlipsPage() {
               >
                 {statusMeta.stamp}
               </div>
+              {slip.status === 'locked' && (
+                <div
+                  style={{
+                    fontSize: '9px',
+                    color: '#8A99A3',
+                    marginTop: '8px',
+                    textAlign: 'center',
+                    fontWeight: 500,
+                    transform: 'rotate(-9deg)',
+                    transformOrigin: 'center',
+                  }}
+                >
+                  Generated: Jun 23 06:14
+                </div>
+              )}
             </div>
           </div>
         </div>
