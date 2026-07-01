@@ -37,14 +37,14 @@ const speciesBase: Record<string, number> = {
   Kanpachi: 24.0,
 };
 
-type DateOption = 'today' | 'tomorrow' | 'other';
-
 export default function OrderIntakePage() {
   const [customerQuery, setCustomerQuery] = useState('');
   const [customer, setCustomer] = useState<string | null>(null);
   const [species, setSpecies] = useState('Ahi Tuna');
   const [qty, setQty] = useState(50);
-  const [date, setDate] = useState<DateOption>('today');
+  const [shipDate, setShipDate] = useState('');
+  const [today, setToday] = useState('');
+  const [tomorrow, setTomorrow] = useState('');
   const [created, setCreated] = useState(false);
   const [createdTime, setCreatedTime] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
@@ -59,11 +59,23 @@ export default function OrderIntakePage() {
     return () => clearInterval(iv);
   }, [created, t0]);
 
+  // Seed ship-date defaults from the real calendar (on mount, to avoid SSR mismatch)
+  useEffect(() => {
+    const iso = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
+        d.getDate()
+      ).padStart(2, '0')}`;
+    const now = new Date();
+    const tmr = new Date();
+    tmr.setDate(now.getDate() + 1);
+    setToday(iso(now));
+    setTomorrow(iso(tmr));
+    setShipDate(iso(now));
+  }, []);
+
   const onCustomerInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const q = e.target.value;
-    const exact = Object.keys(customers).find(
-      (n) => n.toLowerCase() === q.toLowerCase()
-    );
+    const exact = Object.keys(customers).find((n) => n.toLowerCase() === q.toLowerCase());
     setCustomerQuery(q);
     setCustomer(exact || (customer && q === customer ? customer : null));
   };
@@ -81,23 +93,19 @@ export default function OrderIntakePage() {
     setQty(Math.max(0, Math.round(v)));
   };
 
-  const pickDate = (d: DateOption) => {
-    setDate(d);
-  };
-
   const reset = () => {
     setT0(Date.now());
     setCustomerQuery('');
     setCustomer(null);
     setSpecies('Ahi Tuna');
     setQty(50);
-    setDate('today');
+    setShipDate(today);
     setCreated(false);
     setElapsed(0);
   };
 
   const createOrder = () => {
-    if (!customer) return;
+    if (!customer && !customerQuery.trim()) return;
     const mm = Math.floor(elapsed / 60);
     const ss = elapsed % 60;
     setCreated(true);
@@ -107,17 +115,26 @@ export default function OrderIntakePage() {
   const money = (n: number) =>
     '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-  const dateMeta = (d: DateOption) => {
-    if (d === 'today') return { label: 'Today', sub: 'Jun 23', full: 'Today · Jun 23' };
-    if (d === 'tomorrow')
-      return { label: 'Tomorrow', sub: 'Jun 24', full: 'Tomorrow · Jun 24' };
-    return { label: 'Thu', sub: 'Jun 26', full: 'Thu · Jun 26' };
+  const formatShip = (iso: string) => {
+    if (!iso) return { label: '—', sub: '', full: '—' };
+    const [y, m, d] = iso.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    const md = dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    let label = dt.toLocaleDateString('en-US', { weekday: 'short' });
+    if (iso === today) label = 'Today';
+    else if (iso === tomorrow) label = 'Tomorrow';
+    return { label, sub: md, full: `${label} · ${md}` };
   };
 
+  const typedName = customerQuery.trim();
+  const isNewCustomer = !customer && typedName.length > 0;
+  const canCreate = !!customer || isNewCustomer;
+  const customerName = customer || typedName;
   const cust = customer ? customers[customer] : null;
   const hasCustomer = !!cust;
   const base = speciesBase[species] || 0;
-  const price = cust ? base * cust.mult : base;
+  const mult = cust ? cust.mult : 1.0;
+  const price = base * mult;
   const total = price * qty;
 
   const customerChips = Object.keys(customers)
@@ -213,41 +230,6 @@ export default function OrderIntakePage() {
           },
   }));
 
-  const dateChips = [
-    'today',
-    'tomorrow',
-    'other',
-  ].map((d) => {
-    const m = dateMeta(d as DateOption);
-    const on = date === d;
-    return {
-      label: m.label,
-      sub: m.sub,
-      onClick: () => pickDate(d as DateOption),
-      style: on
-        ? {
-            flex: 1,
-            textAlign: 'center' as const,
-            borderRadius: '6px',
-            padding: '11px 8px',
-            cursor: 'pointer',
-            border: '1.5px solid #3F6F86',
-            background: '#EEF3F6',
-            color: '#2D5365',
-          }
-        : {
-            flex: 1,
-            textAlign: 'center' as const,
-            borderRadius: '6px',
-            padding: '11px 8px',
-            cursor: 'pointer',
-            border: '1.5px solid #D6DCE0',
-            background: '#fff',
-            color: '#5A6670',
-          },
-    };
-  });
-
   const overTarget = elapsed > 30 && !created;
   const mm = Math.floor(elapsed / 60);
   const ss = elapsed % 60;
@@ -299,9 +281,7 @@ export default function OrderIntakePage() {
             >
               Order Intake
             </span>
-            <span style={{ fontSize: '12px', color: '#8A99A3' }}>
-              New phone order
-            </span>
+            <span style={{ fontSize: '12px', color: '#8A99A3' }}>New phone order</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
             <div
@@ -346,16 +326,11 @@ export default function OrderIntakePage() {
                 {mm}:{String(ss).padStart(2, '0')}
               </span>
             </div>
-            <span style={{ fontSize: '12px', color: '#8A99A3' }}>
-              Target · under 0:30
-            </span>
+            <span style={{ fontSize: '12px', color: '#8A99A3' }}>Target · under 0:30</span>
           </div>
         </header>
 
-        <div
-          className="mana-scroll"
-          style={{ flex: 1, overflowY: 'auto' }}
-        >
+        <div className="mana-scroll" style={{ flex: 1, overflowY: 'auto' }}>
           <div
             style={{
               display: 'flex',
@@ -396,9 +371,7 @@ export default function OrderIntakePage() {
                   >
                     CUSTOMER
                   </label>
-                  <span style={{ fontSize: '11px', color: '#8A99A3' }}>
-                    Recent
-                  </span>
+                  <span style={{ fontSize: '11px', color: '#8A99A3' }}>Recent</span>
                 </div>
                 <input
                   value={customerQuery}
@@ -538,6 +511,41 @@ export default function OrderIntakePage() {
                 </div>
               )}
 
+              {/* new customer note */}
+              {isNewCustomer && (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    padding: '12px 16px',
+                    background: '#F4EEE2',
+                    border: '1px solid #E4D2A8',
+                    borderRadius: '6px',
+                  }}
+                >
+                  <span
+                    style={{
+                      flex: 'none',
+                      fontSize: '10px',
+                      fontWeight: 700,
+                      letterSpacing: '0.06em',
+                      color: '#8A5A14',
+                      background: '#fff',
+                      border: '1px solid #E4D2A8',
+                      borderRadius: '3px',
+                      padding: '3px 8px',
+                    }}
+                  >
+                    NEW
+                  </span>
+                  <span style={{ fontSize: '13px', color: '#8A5A14', lineHeight: 1.4 }}>
+                    New customer — will be created with standard pricing. Set their tier &amp;
+                    defaults later in Customers.
+                  </span>
+                </div>
+              )}
+
               {/* species */}
               <div>
                 <label
@@ -670,31 +678,64 @@ export default function OrderIntakePage() {
                 >
                   SHIP DATE
                 </label>
-                <div style={{ display: 'flex', gap: '9px' }}>
-                  {dateChips.map((d, i) => (
-                    <button key={i} onClick={d.onClick} style={d.style as React.CSSProperties}>
-                      <span
+                <div style={{ display: 'flex', gap: '9px', alignItems: 'stretch' }}>
+                  {[
+                    { label: 'Today', value: today },
+                    { label: 'Tomorrow', value: tomorrow },
+                  ].map((q) => {
+                    const on = !!q.value && shipDate === q.value;
+                    return (
+                      <button
+                        key={q.label}
+                        onClick={() => setShipDate(q.value)}
                         style={{
-                          display: 'block',
+                          textAlign: 'center',
+                          borderRadius: '6px',
+                          padding: '11px 16px',
+                          cursor: 'pointer',
+                          fontFamily: "'Archivo', sans-serif",
                           fontSize: '14px',
                           fontWeight: 600,
+                          border: on ? '1.5px solid #3F6F86' : '1.5px solid #D6DCE0',
+                          background: on ? '#EEF3F6' : '#fff',
+                          color: on ? '#2D5365' : '#5A6670',
                         }}
                       >
-                        {d.label}
-                      </span>
-                      <span
-                        style={{
-                          display: 'block',
-                          fontFamily: "'IBM Plex Mono', monospace",
-                          fontSize: '11px',
-                          opacity: 0.7,
-                          marginTop: '2px',
-                        }}
-                      >
-                        {d.sub}
-                      </span>
-                    </button>
-                  ))}
+                        {q.label}
+                      </button>
+                    );
+                  })}
+                  <input
+                    type="date"
+                    value={shipDate}
+                    min={today}
+                    onChange={(e) => setShipDate(e.target.value)}
+                    style={{
+                      flex: 1,
+                      minWidth: 0,
+                      fontFamily: "'IBM Plex Mono', monospace",
+                      fontSize: '14px',
+                      fontWeight: 500,
+                      padding: '11px 14px',
+                      border: '1.5px solid #C2CAD0',
+                      borderRadius: '6px',
+                      outline: 'none',
+                      background: '#fff',
+                      color: '#222A30',
+                      cursor: 'pointer',
+                    }}
+                    onFocus={(e) => {
+                      e.target.style.borderColor = '#3F6F86';
+                      e.target.style.boxShadow = '0 0 0 3px rgba(63,111,134,0.12)';
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = '#C2CAD0';
+                      e.target.style.boxShadow = 'none';
+                    }}
+                  />
+                </div>
+                <div style={{ fontSize: '11px', color: '#8A99A3', marginTop: '8px' }}>
+                  {shipDate ? `Shipping ${formatShip(shipDate).full}` : 'Pick a ship date'}
                 </div>
               </div>
             </div>
@@ -745,15 +786,17 @@ export default function OrderIntakePage() {
                       fontSize: '19px',
                       fontWeight: 700,
                       letterSpacing: '-0.01em',
-                      ...(customer ? {} : { color: '#B6BEC4' }),
+                      ...(customerName ? {} : { color: '#B6BEC4' }),
                     }}
                   >
-                    {customer || 'Select customer'}
+                    {customerName || 'Select customer'}
                   </div>
                   <div style={{ fontSize: '12px', color: '#8A99A3', marginTop: '3px' }}>
                     {cust
                       ? `${cust.tier} · ${cust.terms}`
-                      : 'Tier & carrier auto-fill on select'}
+                      : isNewCustomer
+                        ? 'New customer · standard pricing'
+                        : 'Tier & carrier auto-fill on select'}
                   </div>
 
                   <div
@@ -773,12 +816,8 @@ export default function OrderIntakePage() {
                         paddingBottom: '11px',
                       }}
                     >
-                      <span style={{ fontSize: '13px', color: '#5A6670' }}>
-                        Species
-                      </span>
-                      <span style={{ fontSize: '14px', fontWeight: 600 }}>
-                        {species}
-                      </span>
+                      <span style={{ fontSize: '13px', color: '#5A6670' }}>Species</span>
+                      <span style={{ fontSize: '14px', fontWeight: 600 }}>{species}</span>
                     </div>
                     <div
                       style={{
@@ -789,9 +828,7 @@ export default function OrderIntakePage() {
                         paddingBottom: '11px',
                       }}
                     >
-                      <span style={{ fontSize: '13px', color: '#5A6670' }}>
-                        Quantity
-                      </span>
+                      <span style={{ fontSize: '13px', color: '#5A6670' }}>Quantity</span>
                       <span
                         style={{
                           fontFamily: "'IBM Plex Mono', monospace",
@@ -811,11 +848,9 @@ export default function OrderIntakePage() {
                         paddingBottom: '11px',
                       }}
                     >
-                      <span style={{ fontSize: '13px', color: '#5A6670' }}>
-                        Ship date
-                      </span>
+                      <span style={{ fontSize: '13px', color: '#5A6670' }}>Ship date</span>
                       <span style={{ fontSize: '14px', fontWeight: 600 }}>
-                        {dateMeta(date).full}
+                        {formatShip(shipDate).full}
                       </span>
                     </div>
                     <div
@@ -827,9 +862,7 @@ export default function OrderIntakePage() {
                         paddingBottom: '11px',
                       }}
                     >
-                      <span style={{ fontSize: '13px', color: '#5A6670' }}>
-                        Carrier
-                      </span>
+                      <span style={{ fontSize: '13px', color: '#5A6670' }}>Carrier</span>
                       <span style={{ fontSize: '14px', fontWeight: 600 }}>
                         {cust?.carrier || '—'}
                       </span>
@@ -873,13 +906,13 @@ export default function OrderIntakePage() {
                       border: 'none',
                       borderRadius: '6px',
                       padding: '14px',
-                      cursor: customer ? 'pointer' : 'default',
-                      ...(customer
+                      cursor: canCreate ? 'pointer' : 'default',
+                      ...(canCreate
                         ? { background: '#222A30', color: '#fff' }
                         : { background: '#E2E6E9', color: '#A6AEB4' }),
                     }}
                   >
-                    {customer ? 'Create order →' : 'Select a customer first'}
+                    {canCreate ? 'Create order →' : 'Enter a customer name'}
                   </button>
                   <button
                     onClick={reset}

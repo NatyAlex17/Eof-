@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Nav from '../components/Nav';
 import ConfirmLockModal from '../components/ConfirmLockModal';
 import LockedBoardBanner from '../components/LockedBoardBanner';
+import SplitBoxModal from '../components/SplitBoxModal';
 
 interface Order {
   id: string;
@@ -28,6 +29,10 @@ interface Box {
   split: null | { a: number; b: number };
   locked: boolean;
   lockInitial?: string;
+  // Split-box tracking: pieces of a split share a splitGroup and remember their origin
+  splitGroup?: string;
+  parentN?: string;
+  part?: 'A' | 'B';
 }
 
 interface Lot {
@@ -52,8 +57,8 @@ export default function AllocationBoardPage() {
   const router = useRouter();
   const [location, setLocation] = useState<'SFO' | 'LAX'>('SFO');
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>('o1');
-  const [_splitOpen, _setSplitOpen] = useState(false);
-  const [_splitBox, _setSplitBox] = useState<{ lot: string; box: Box; wtA: number } | null>(null);
+  const [splitModal, setSplitModal] = useState<{ lotId: string; box: Box } | null>(null);
+  const [splitSeq, setSplitSeq] = useState(0);
   const [isLocked, setIsLocked] = useState(false);
   const [lockModalOpen, setLockModalOpen] = useState(false);
   const [isLocking, setIsLocking] = useState(false);
@@ -264,9 +269,109 @@ export default function AllocationBoardPage() {
     setDragOverOrderId(null);
   };
 
+  const round1 = (n: number) => Math.round(n * 10) / 10;
+
+  // Split a box into two pieces (A / B) by weight, each independently assignable
+  const confirmSplit = (weightA: number, orderA: string | null, orderB: string | null) => {
+    if (!splitModal) return;
+    const { lotId, box } = splitModal;
+    const wA = round1(Math.min(Math.max(weightA, 0.1), box.weight - 0.1));
+    const wB = round1(box.weight - wA);
+    const group = `sg${splitSeq + 1}`;
+    setSplitSeq((s) => s + 1);
+    const parentN = box.parentN || box.n;
+    setLots((prev) =>
+      prev.map((lot) => {
+        if (lot.id !== lotId) return lot;
+        const newBoxes: Box[] = [];
+        lot.boxes.forEach((b) => {
+          if (b.id !== box.id) {
+            newBoxes.push(b);
+            return;
+          }
+          newBoxes.push({
+            ...b,
+            id: `${b.id}-a${group}`,
+            n: `${parentN}·A`,
+            weight: wA,
+            assignedTo: orderA,
+            splitGroup: group,
+            parentN,
+            part: 'A',
+          });
+          newBoxes.push({
+            ...b,
+            id: `${b.id}-b${group}`,
+            n: `${parentN}·B`,
+            weight: wB,
+            assignedTo: orderB,
+            splitGroup: group,
+            parentN,
+            part: 'B',
+          });
+        });
+        return { ...lot, boxes: newBoxes };
+      })
+    );
+    setSplitModal(null);
+  };
+
+  // Merge a split back into one whole box (leaves it unassigned)
+  const mergeSplit = (lotId: string, box: Box) => {
+    if (isLocked || !box.splitGroup) return;
+    setLots((prev) =>
+      prev.map((lot) => {
+        if (lot.id !== lotId) return lot;
+        const group = box.splitGroup;
+        const pieces = lot.boxes.filter((b) => b.splitGroup === group);
+        if (pieces.length === 0) return lot;
+        const total = round1(pieces.reduce((s, b) => s + b.weight, 0));
+        const first = pieces[0];
+        const merged: Box = {
+          id: first.id.replace(/-[ab]sg\d+$/, ''),
+          n: first.parentN || first.n,
+          idx: first.idx,
+          weight: total,
+          species: first.species,
+          assignedTo: null,
+          split: null,
+          locked: false,
+        };
+        const newBoxes: Box[] = [];
+        let inserted = false;
+        lot.boxes.forEach((b) => {
+          if (b.splitGroup === group) {
+            if (!inserted) {
+              newBoxes.push(merged);
+              inserted = true;
+            }
+          } else {
+            newBoxes.push(b);
+          }
+        });
+        return { ...lot, boxes: newBoxes };
+      })
+    );
+  };
+
   const getOrderColor = (orderId: string | null) =>
     orders.find((o) => o.id === orderId)?.color || '#CCCCCC';
   const getOrderCode = (orderId: string | null) => orders.find((o) => o.id === orderId)?.code || '';
+
+  const iconBtnStyle: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '20px',
+    height: '20px',
+    padding: 0,
+    border: '1px solid #D6DCE0',
+    borderRadius: '4px',
+    background: '#fff',
+    color: '#5A6670',
+    cursor: 'pointer',
+    flex: 'none',
+  };
 
   // Count allocated boxes
   const allocatedBoxes = lots.reduce(
@@ -878,24 +983,87 @@ export default function AllocationBoardPage() {
                                 fontSize: '13px',
                                 fontWeight: 600,
                                 color: box.assignedTo ? boxColor : '#222A30',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
                               }}
                             >
                               {box.n}
                             </span>
-                            {box.assignedTo && (
-                              <span
-                                style={{
-                                  fontSize: '9px',
-                                  fontWeight: 700,
-                                  color: '#fff',
-                                  background: getOrderColor(box.assignedTo),
-                                  borderRadius: '2px',
-                                  padding: '2px 6px',
-                                }}
-                              >
-                                {getOrderCode(box.assignedTo)}
-                              </span>
-                            )}
+                            <div
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                                flex: 'none',
+                              }}
+                            >
+                              {box.assignedTo && (
+                                <span
+                                  style={{
+                                    fontSize: '9px',
+                                    fontWeight: 700,
+                                    color: '#fff',
+                                    background: getOrderColor(box.assignedTo),
+                                    borderRadius: '2px',
+                                    padding: '2px 6px',
+                                  }}
+                                >
+                                  {getOrderCode(box.assignedTo)}
+                                </span>
+                              )}
+                              {!isLocked &&
+                                (box.splitGroup ? (
+                                  <button
+                                    title="Merge split back into one box"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      mergeSplit(lot.id, box);
+                                    }}
+                                    style={iconBtnStyle}
+                                  >
+                                    <svg
+                                      width="13"
+                                      height="13"
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="2"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                    >
+                                      <polyline points="9 7 4 12 9 17" />
+                                      <polyline points="15 7 20 12 15 17" />
+                                    </svg>
+                                  </button>
+                                ) : (
+                                  <button
+                                    title="Split this box by weight"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSplitModal({ lotId: lot.id, box });
+                                    }}
+                                    style={iconBtnStyle}
+                                  >
+                                    <svg
+                                      width="13"
+                                      height="13"
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="2"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                    >
+                                      <circle cx="6" cy="6" r="3" />
+                                      <circle cx="6" cy="18" r="3" />
+                                      <line x1="20" y1="4" x2="8.12" y2="15.88" />
+                                      <line x1="14.47" y1="14.48" x2="20" y2="20" />
+                                      <line x1="8.12" y1="8.12" x2="12" y2="12" />
+                                    </svg>
+                                  </button>
+                                ))}
+                            </div>
                           </div>
                           <div
                             style={{
@@ -905,9 +1073,26 @@ export default function AllocationBoardPage() {
                               marginTop: '9px',
                             }}
                           >
-                            <span style={{ fontSize: '11px', color: '#8A99A3', fontWeight: 500 }}>
-                              #{box.idx}
-                            </span>
+                            {box.splitGroup ? (
+                              <span
+                                style={{
+                                  fontSize: '9px',
+                                  fontWeight: 700,
+                                  letterSpacing: '0.04em',
+                                  color: '#8A5A14',
+                                  background: '#F4EEE2',
+                                  border: '1px solid #E4D2A8',
+                                  borderRadius: '2px',
+                                  padding: '2px 6px',
+                                }}
+                              >
+                                SPLIT · {box.part}
+                              </span>
+                            ) : (
+                              <span style={{ fontSize: '11px', color: '#8A99A3', fontWeight: 500 }}>
+                                #{box.idx}
+                              </span>
+                            )}
                             <span
                               style={{
                                 fontFamily: "'IBM Plex Mono', monospace",
@@ -941,6 +1126,21 @@ export default function AllocationBoardPage() {
         onConfirm={handleConfirmLock}
         onCancel={() => setLockModalOpen(false)}
         isLoading={isLocking}
+      />
+
+      <SplitBoxModal
+        isOpen={!!splitModal}
+        boxLabel={splitModal?.box.parentN || splitModal?.box.n || ''}
+        totalWeight={splitModal?.box.weight || 0}
+        orders={orders.map((o) => ({
+          id: o.id,
+          code: o.code,
+          customer: o.customer,
+          color: o.color,
+        }))}
+        defaultOrderA={selectedOrderId}
+        onConfirm={confirmSplit}
+        onCancel={() => setSplitModal(null)}
       />
     </div>
   );
