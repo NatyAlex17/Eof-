@@ -1,6 +1,7 @@
 'use client';
 
 import Nav from '../components/Nav';
+import DateRangeFilter from '../components/DateRangeFilter';
 
 const KPIS = [
   {
@@ -143,6 +144,7 @@ export default function FinanceDashboardPage() {
               QBO connected · last sync 06:02
             </span>
           </div>
+          <DateRangeFilter defaultKey="last7" />
         </header>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '22px 28px' }}>

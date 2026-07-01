@@ -10,23 +10,19 @@ interface Customer {
   terms: string;
 }
 
+interface LineItem {
+  id: number;
+  species: string;
+  qty: number;
+}
+
 const customers: Record<string, Customer> = {
   Nobu: { tier: 'Tier 1', mult: 0.95, carrier: 'Air Cargo', terms: 'Net 15' },
   Morimoto: { tier: 'Tier 1', mult: 0.95, carrier: 'Air Cargo', terms: 'Net 15' },
   "Roy's": { tier: 'Tier 2', mult: 1.0, carrier: 'Ground', terms: 'Net 30' },
   "Alan Wong's": { tier: 'Tier 2', mult: 1.0, carrier: 'Ground', terms: 'Net 30' },
-  "Hy's Steakhouse": {
-    tier: 'Tier 2',
-    mult: 1.0,
-    carrier: 'Ground',
-    terms: 'Net 30',
-  },
-  "Tiki's Grill": {
-    tier: 'Tier 3',
-    mult: 1.08,
-    carrier: 'Will Call',
-    terms: 'COD',
-  },
+  "Hy's Steakhouse": { tier: 'Tier 2', mult: 1.0, carrier: 'Ground', terms: 'Net 30' },
+  "Tiki's Grill": { tier: 'Tier 3', mult: 1.08, carrier: 'Will Call', terms: 'COD' },
 };
 
 const speciesBase: Record<string, number> = {
@@ -40,8 +36,8 @@ const speciesBase: Record<string, number> = {
 export default function OrderIntakePage() {
   const [customerQuery, setCustomerQuery] = useState('');
   const [customer, setCustomer] = useState<string | null>(null);
-  const [species, setSpecies] = useState('Ahi Tuna');
-  const [qty, setQty] = useState(50);
+  const [lines, setLines] = useState<LineItem[]>([{ id: 1, species: 'Ahi Tuna', qty: 50 }]);
+  const [seq, setSeq] = useState(2);
   const [shipDate, setShipDate] = useState('');
   const [today, setToday] = useState('');
   const [tomorrow, setTomorrow] = useState('');
@@ -62,9 +58,7 @@ export default function OrderIntakePage() {
   // Seed ship-date defaults from the real calendar (on mount, to avoid SSR mismatch)
   useEffect(() => {
     const iso = (d: Date) =>
-      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
-        d.getDate()
-      ).padStart(2, '0')}`;
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     const now = new Date();
     const tmr = new Date();
     tmr.setDate(now.getDate() + 1);
@@ -85,31 +79,38 @@ export default function OrderIntakePage() {
     setCustomerQuery(name);
   };
 
-  const pickSpecies = (s: string) => {
-    setSpecies(s);
+  // --- Multi-species line handling ---
+  const toggleSpecies = (s: string) => {
+    setLines((prev) => {
+      const exists = prev.find((l) => l.species === s);
+      if (exists) return prev.filter((l) => l.species !== s);
+      const next = [...prev, { id: seq, species: s, qty: 50 }];
+      setSeq((n) => n + 1);
+      return next;
+    });
   };
 
-  const setQuantity = (v: number) => {
-    setQty(Math.max(0, Math.round(v)));
-  };
+  const removeLine = (id: number) => setLines((prev) => prev.filter((l) => l.id !== id));
+
+  const setLineQty = (id: number, v: number) =>
+    setLines((prev) =>
+      prev.map((l) => (l.id === id ? { ...l, qty: Math.max(0, Math.round(v)) } : l))
+    );
+
+  const adjustLineQty = (id: number, delta: number) =>
+    setLines((prev) =>
+      prev.map((l) => (l.id === id ? { ...l, qty: Math.max(0, Math.round(l.qty + delta)) } : l))
+    );
 
   const reset = () => {
     setT0(Date.now());
     setCustomerQuery('');
     setCustomer(null);
-    setSpecies('Ahi Tuna');
-    setQty(50);
+    setLines([{ id: seq, species: 'Ahi Tuna', qty: 50 }]);
+    setSeq((n) => n + 1);
     setShipDate(today);
     setCreated(false);
     setElapsed(0);
-  };
-
-  const createOrder = () => {
-    if (!customer && !customerQuery.trim()) return;
-    const mm = Math.floor(elapsed / 60);
-    const ss = elapsed % 60;
-    setCreated(true);
-    setCreatedTime(`${mm}:${String(ss).padStart(2, '0')}`);
   };
 
   const money = (n: number) =>
@@ -128,107 +129,60 @@ export default function OrderIntakePage() {
 
   const typedName = customerQuery.trim();
   const isNewCustomer = !customer && typedName.length > 0;
-  const canCreate = !!customer || isNewCustomer;
+  const hasSelection = !!customer || isNewCustomer;
+  const hasLines = lines.length > 0 && lines.some((l) => l.qty > 0);
+  const canCreate = hasSelection && hasLines;
   const customerName = customer || typedName;
   const cust = customer ? customers[customer] : null;
   const hasCustomer = !!cust;
-  const base = speciesBase[species] || 0;
   const mult = cust ? cust.mult : 1.0;
-  const price = base * mult;
-  const total = price * qty;
+
+  // Priced lines + totals
+  const pricedLines = lines.map((l) => {
+    const base = speciesBase[l.species] || 0;
+    const price = base * mult;
+    return { ...l, price, subtotal: price * l.qty };
+  });
+  const grandTotal = pricedLines.reduce((a, l) => a + l.subtotal, 0);
+  const totalLb = lines.reduce((a, l) => a + l.qty, 0);
+
+  const createOrder = () => {
+    if (!canCreate) return;
+    const mm = Math.floor(elapsed / 60);
+    const ss = elapsed % 60;
+    setCreated(true);
+    setCreatedTime(`${mm}:${String(ss).padStart(2, '0')}`);
+  };
 
   const customerChips = Object.keys(customers)
     .slice(0, 5)
     .map((n) => ({
       name: n,
       onClick: () => pickCustomer(n),
-      style:
-        customer === n
-          ? {
-              fontFamily: "'Archivo',sans-serif",
-              fontSize: '13px',
-              fontWeight: 600,
-              borderRadius: '6px',
-              padding: '8px 15px',
-              cursor: 'pointer',
-              border: '1px solid #3F6F86',
-              background: '#3F6F86',
-              color: '#fff',
-            }
-          : {
-              fontFamily: "'Archivo',sans-serif",
-              fontSize: '13px',
-              fontWeight: 600,
-              borderRadius: '6px',
-              padding: '8px 15px',
-              cursor: 'pointer',
-              border: '1px solid #D6DCE0',
-              background: '#fff',
-              color: '#5A6670',
-            },
-    }));
-
-  const speciesChips = Object.keys(speciesBase).map((n) => {
-    const on = species === n;
-    return {
-      name: n,
-      onClick: () => pickSpecies(n),
-      style: on
+      style: (customer === n
         ? {
             fontFamily: "'Archivo',sans-serif",
-            fontSize: '14px',
-            fontWeight: 600,
-            borderRadius: '6px',
-            padding: '11px 18px',
-            cursor: 'pointer',
-            border: '1.5px solid #3F6F86',
-            background: '#EEF3F6',
-            color: '#2D5365',
-          }
-        : {
-            fontFamily: "'Archivo',sans-serif",
-            fontSize: '14px',
-            fontWeight: 600,
-            borderRadius: '6px',
-            padding: '11px 18px',
-            cursor: 'pointer',
-            border: '1.5px solid #D6DCE0',
-            background: '#fff',
-            color: '#5A6670',
-          },
-    };
-  });
-
-  const qtyChips = [25, 50, 75, 100].map((v) => ({
-    label: v + ' lb',
-    onClick: () => setQuantity(v),
-    style:
-      qty === v
-        ? {
-            flex: 1,
-            fontFamily: "'IBM Plex Mono',monospace",
             fontSize: '13px',
             fontWeight: 600,
             borderRadius: '6px',
-            padding: '9px',
+            padding: '8px 15px',
             cursor: 'pointer',
-            border: '1.5px solid #3F6F86',
-            background: '#EEF3F6',
-            color: '#2D5365',
+            border: '1px solid #3F6F86',
+            background: '#3F6F86',
+            color: '#fff',
           }
         : {
-            flex: 1,
-            fontFamily: "'IBM Plex Mono',monospace",
+            fontFamily: "'Archivo',sans-serif",
             fontSize: '13px',
             fontWeight: 600,
             borderRadius: '6px',
-            padding: '9px',
+            padding: '8px 15px',
             cursor: 'pointer',
             border: '1px solid #D6DCE0',
             background: '#fff',
             color: '#5A6670',
-          },
-  }));
+          }) as React.CSSProperties,
+    }));
 
   const overTarget = elapsed > 30 && !created;
   const mm = Math.floor(elapsed / 60);
@@ -248,15 +202,7 @@ export default function OrderIntakePage() {
     >
       <Nav />
 
-      <div
-        style={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          minWidth: 0,
-          minHeight: 0,
-        }}
-      >
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
         {/* header */}
         <header
           style={{
@@ -272,13 +218,7 @@ export default function OrderIntakePage() {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px' }}>
-            <span
-              style={{
-                fontSize: '16px',
-                fontWeight: 700,
-                letterSpacing: '-0.01em',
-              }}
-            >
+            <span style={{ fontSize: '16px', fontWeight: 700, letterSpacing: '-0.01em' }}>
               Order Intake
             </span>
             <span style={{ fontSize: '12px', color: '#8A99A3' }}>New phone order</span>
@@ -293,16 +233,8 @@ export default function OrderIntakePage() {
                 borderRadius: '20px',
                 padding: '5px 12px',
                 ...(overTarget
-                  ? {
-                      background: '#F4EEE2',
-                      color: '#8A5A14',
-                      border: '1px solid #E4D2A8',
-                    }
-                  : {
-                      background: '#EAF1ED',
-                      color: '#2E6347',
-                      border: '1px solid #BFD8C9',
-                    }),
+                  ? { background: '#F4EEE2', color: '#8A5A14', border: '1px solid #E4D2A8' }
+                  : { background: '#EAF1ED', color: '#2E6347', border: '1px solid #BFD8C9' }),
               }}
             >
               <svg
@@ -317,12 +249,7 @@ export default function OrderIntakePage() {
                 <line x1="12" y1="13" x2="12" y2="9" />
                 <line x1="9" y1="2" x2="15" y2="2" />
               </svg>
-              <span
-                style={{
-                  fontFamily: "'IBM Plex Mono', monospace",
-                  fontWeight: 600,
-                }}
-              >
+              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontWeight: 600 }}>
                 {mm}:{String(ss).padStart(2, '0')}
               </span>
             </div>
@@ -397,16 +324,9 @@ export default function OrderIntakePage() {
                     e.target.style.boxShadow = 'none';
                   }}
                 />
-                <div
-                  style={{
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    gap: '8px',
-                    marginTop: '10px',
-                  }}
-                >
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '10px' }}>
                   {customerChips.map((c, i) => (
-                    <button key={i} onClick={c.onClick} style={c.style as React.CSSProperties}>
+                    <button key={i} onClick={c.onClick} style={c.style}>
                       {c.name}
                     </button>
                   ))}
@@ -423,7 +343,6 @@ export default function OrderIntakePage() {
                     background: '#EEF3F6',
                     border: '1px solid #BBD0DB',
                     borderRadius: '6px',
-                    animation: 'none',
                   }}
                 >
                   <div style={{ flex: 1 }}>
@@ -546,122 +465,251 @@ export default function OrderIntakePage() {
                 </div>
               )}
 
-              {/* species */}
+              {/* species — tap to add/remove lines */}
               <div>
-                <label
-                  style={{
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    letterSpacing: '0.06em',
-                    color: '#5A6670',
-                    display: 'block',
-                    marginBottom: '9px',
-                  }}
-                >
-                  SPECIES
-                </label>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '9px' }}>
-                  {speciesChips.map((sp, i) => (
-                    <button key={i} onClick={sp.onClick} style={sp.style as React.CSSProperties}>
-                      {sp.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* quantity */}
-              <div>
-                <label
-                  style={{
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    letterSpacing: '0.06em',
-                    color: '#5A6670',
-                    display: 'block',
-                    marginBottom: '9px',
-                  }}
-                >
-                  QUANTITY
-                </label>
                 <div
                   style={{
                     display: 'flex',
-                    alignItems: 'stretch',
-                    gap: '10px',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: '9px',
                   }}
                 >
-                  <button
-                    onClick={() => setQuantity(qty - 5)}
+                  <label
                     style={{
-                      width: '54px',
-                      flex: 'none',
-                      fontSize: '24px',
-                      fontWeight: 500,
-                      background: '#fff',
-                      border: '1.5px solid #C2CAD0',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      color: '#222A30',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      letterSpacing: '0.06em',
+                      color: '#5A6670',
                     }}
                   >
-                    –
-                  </button>
+                    SPECIES
+                  </label>
+                  <span style={{ fontSize: '11px', color: '#8A99A3' }}>
+                    Tap to add · one order, multiple species
+                  </span>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '9px' }}>
+                  {Object.keys(speciesBase).map((s) => {
+                    const on = lines.some((l) => l.species === s);
+                    return (
+                      <button
+                        key={s}
+                        onClick={() => toggleSpecies(s)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '7px',
+                          fontFamily: "'Archivo',sans-serif",
+                          fontSize: '14px',
+                          fontWeight: 600,
+                          borderRadius: '6px',
+                          padding: '11px 16px',
+                          cursor: 'pointer',
+                          border: on ? '1.5px solid #3F6F86' : '1.5px solid #D6DCE0',
+                          background: on ? '#EEF3F6' : '#fff',
+                          color: on ? '#2D5365' : '#5A6670',
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: '15px',
+                            height: '15px',
+                            borderRadius: '4px',
+                            flex: 'none',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            border: on ? 'none' : '1.5px solid #C2CAD0',
+                            background: on ? '#3F6F86' : '#fff',
+                            color: '#fff',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                          }}
+                        >
+                          {on ? '✓' : '+'}
+                        </span>
+                        {s}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* line items — independent quantities */}
+              <div>
+                <label
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    letterSpacing: '0.06em',
+                    color: '#5A6670',
+                    display: 'block',
+                    marginBottom: '9px',
+                  }}
+                >
+                  LINE ITEMS &amp; QUANTITIES
+                </label>
+                {lines.length === 0 ? (
                   <div
                     style={{
-                      flex: 1,
-                      display: 'flex',
-                      alignItems: 'baseline',
-                      justifyContent: 'center',
-                      gap: '8px',
-                      border: '1.5px solid #C2CAD0',
-                      borderRadius: '6px',
+                      border: '1.5px dashed #D6DCE0',
+                      borderRadius: '8px',
+                      padding: '24px',
+                      textAlign: 'center',
+                      fontSize: '13px',
+                      color: '#8A99A3',
                       background: '#fff',
-                      padding: '10px',
                     }}
                   >
-                    <span
-                      style={{
-                        fontFamily: "'IBM Plex Mono', monospace",
-                        fontSize: '34px',
-                        fontWeight: 600,
-                      }}
-                    >
-                      {qty}
-                    </span>
-                    <span
-                      style={{
-                        fontSize: '15px',
-                        color: '#8A99A3',
-                        fontWeight: 500,
-                      }}
-                    >
-                      lb
-                    </span>
+                    Tap a species above to add it to this order.
                   </div>
-                  <button
-                    onClick={() => setQuantity(qty + 5)}
-                    style={{
-                      width: '54px',
-                      flex: 'none',
-                      fontSize: '24px',
-                      fontWeight: 500,
-                      background: '#fff',
-                      border: '1.5px solid #C2CAD0',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      color: '#222A30',
-                    }}
-                  >
-                    +
-                  </button>
-                </div>
-                <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
-                  {qtyChips.map((q, i) => (
-                    <button key={i} onClick={q.onClick} style={q.style as React.CSSProperties}>
-                      {q.label}
-                    </button>
-                  ))}
-                </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {pricedLines.map((l) => (
+                      <div
+                        key={l.id}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '14px',
+                          background: '#fff',
+                          border: '1px solid #E2E6E9',
+                          borderRadius: '8px',
+                          padding: '13px 14px',
+                        }}
+                      >
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: '15px', fontWeight: 700 }}>{l.species}</div>
+                          <div style={{ fontSize: '11px', color: '#8A99A3', marginTop: '2px' }}>
+                            @ {money(l.price)}/lb · {money(l.subtotal)}
+                          </div>
+                        </div>
+                        {/* compact stepper */}
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            flex: 'none',
+                          }}
+                        >
+                          <button
+                            onClick={() => adjustLineQty(l.id, -5)}
+                            style={{
+                              width: '34px',
+                              height: '38px',
+                              fontSize: '20px',
+                              fontWeight: 500,
+                              background: '#fff',
+                              border: '1.5px solid #C2CAD0',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              color: '#222A30',
+                            }}
+                          >
+                            –
+                          </button>
+                          <div
+                            style={{
+                              display: 'flex',
+                              alignItems: 'baseline',
+                              gap: '4px',
+                              width: '86px',
+                              justifyContent: 'center',
+                              border: '1.5px solid #C2CAD0',
+                              borderRadius: '6px',
+                              padding: '7px 6px',
+                            }}
+                          >
+                            <input
+                              value={l.qty}
+                              onChange={(e) =>
+                                setLineQty(
+                                  l.id,
+                                  parseInt(e.target.value.replace(/\D/g, '') || '0', 10)
+                                )
+                              }
+                              style={{
+                                width: '48px',
+                                border: 'none',
+                                outline: 'none',
+                                textAlign: 'right',
+                                fontFamily: "'IBM Plex Mono', monospace",
+                                fontSize: '20px',
+                                fontWeight: 600,
+                                color: '#222A30',
+                                background: 'transparent',
+                                padding: 0,
+                              }}
+                            />
+                            <span style={{ fontSize: '12px', color: '#8A99A3' }}>lb</span>
+                          </div>
+                          <button
+                            onClick={() => adjustLineQty(l.id, 5)}
+                            style={{
+                              width: '34px',
+                              height: '38px',
+                              fontSize: '20px',
+                              fontWeight: 500,
+                              background: '#fff',
+                              border: '1.5px solid #C2CAD0',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              color: '#222A30',
+                            }}
+                          >
+                            +
+                          </button>
+                        </div>
+                        <button
+                          onClick={() => removeLine(l.id)}
+                          title="Remove"
+                          style={{
+                            flex: 'none',
+                            width: '30px',
+                            height: '30px',
+                            borderRadius: '6px',
+                            border: '1px solid #E2E6E9',
+                            background: '#fff',
+                            color: '#8A99A3',
+                            cursor: 'pointer',
+                            fontSize: '16px',
+                            lineHeight: 1,
+                          }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                    {/* running total */}
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'baseline',
+                        padding: '10px 14px',
+                        background: '#F4F5F6',
+                        border: '1px solid #E2E6E9',
+                        borderRadius: '8px',
+                      }}
+                    >
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#5A6670' }}>
+                        {lines.length} {lines.length === 1 ? 'species' : 'species'} · {totalLb} lb
+                        total
+                      </span>
+                      <span
+                        style={{
+                          fontFamily: "'IBM Plex Mono', monospace",
+                          fontSize: '16px',
+                          fontWeight: 700,
+                        }}
+                      >
+                        {money(grandTotal)}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* ship date */}
@@ -804,41 +852,59 @@ export default function OrderIntakePage() {
                       marginTop: '18px',
                       display: 'flex',
                       flexDirection: 'column',
-                      gap: '11px',
+                      gap: '10px',
                     }}
                   >
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'baseline',
-                        borderBottom: '1px solid #EDEFF1',
-                        paddingBottom: '11px',
-                      }}
-                    >
-                      <span style={{ fontSize: '13px', color: '#5A6670' }}>Species</span>
-                      <span style={{ fontSize: '14px', fontWeight: 600 }}>{species}</span>
-                    </div>
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'baseline',
-                        borderBottom: '1px solid #EDEFF1',
-                        paddingBottom: '11px',
-                      }}
-                    >
-                      <span style={{ fontSize: '13px', color: '#5A6670' }}>Quantity</span>
-                      <span
+                    {/* line items */}
+                    {pricedLines.length === 0 ? (
+                      <div
                         style={{
-                          fontFamily: "'IBM Plex Mono', monospace",
-                          fontSize: '14px',
-                          fontWeight: 600,
+                          fontSize: '13px',
+                          color: '#B6BEC4',
+                          paddingBottom: '11px',
+                          borderBottom: '1px solid #EDEFF1',
                         }}
                       >
-                        {qty} lb
-                      </span>
-                    </div>
+                        No species added yet
+                      </div>
+                    ) : (
+                      pricedLines.map((l) => (
+                        <div
+                          key={l.id}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'baseline',
+                            borderBottom: '1px solid #EDEFF1',
+                            paddingBottom: '10px',
+                          }}
+                        >
+                          <div>
+                            <div style={{ fontSize: '14px', fontWeight: 600 }}>{l.species}</div>
+                            <div
+                              style={{
+                                fontFamily: "'IBM Plex Mono', monospace",
+                                fontSize: '11px',
+                                color: '#8A99A3',
+                                marginTop: '2px',
+                              }}
+                            >
+                              {l.qty} lb @ {money(l.price)}
+                            </div>
+                          </div>
+                          <span
+                            style={{
+                              fontFamily: "'IBM Plex Mono', monospace",
+                              fontSize: '14px',
+                              fontWeight: 600,
+                            }}
+                          >
+                            {money(l.subtotal)}
+                          </span>
+                        </div>
+                      ))
+                    )}
+
                     <div
                       style={{
                         display: 'flex',
@@ -875,7 +941,7 @@ export default function OrderIntakePage() {
                       }}
                     >
                       <span style={{ fontSize: '13px', color: '#5A6670' }}>
-                        Est. @ {money(price)}/lb
+                        Total · {totalLb} lb
                       </span>
                       <span
                         style={{
@@ -884,7 +950,7 @@ export default function OrderIntakePage() {
                           fontWeight: 600,
                         }}
                       >
-                        {money(total)}
+                        {money(grandTotal)}
                       </span>
                     </div>
                   </div>
@@ -912,7 +978,11 @@ export default function OrderIntakePage() {
                         : { background: '#E2E6E9', color: '#A6AEB4' }),
                     }}
                   >
-                    {canCreate ? 'Create order →' : 'Enter a customer name'}
+                    {!hasSelection
+                      ? 'Enter a customer name'
+                      : !hasLines
+                        ? 'Add at least one species'
+                        : 'Create order →'}
                   </button>
                   <button
                     onClick={reset}
@@ -962,14 +1032,9 @@ export default function OrderIntakePage() {
                   >
                     ✓
                   </span>
-                  <span
-                    style={{
-                      fontSize: '13px',
-                      fontWeight: 500,
-                      color: '#2E6347',
-                    }}
-                  >
-                    Order #2213 created in {createdTime} — sent to the board.
+                  <span style={{ fontSize: '13px', fontWeight: 500, color: '#2E6347' }}>
+                    Order #2213 created in {createdTime} — {lines.length}-species order sent to the
+                    board.
                   </span>
                 </div>
               )}
