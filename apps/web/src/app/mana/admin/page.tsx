@@ -1,170 +1,42 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Nav from '../components/Nav';
+import { createClient } from '@/lib/supabase/client';
 
 type AdminTab = 'users' | 'sku' | 'pricing' | 'mappings' | 'integrations';
 
-interface User {
+interface Profile {
   id: string;
   name: string;
   email: string;
   role: 'admin' | 'operations' | 'finance' | 'sales' | 'logistics' | 'viewer';
-  location: string;
+  location: string | null;
   status: 'active' | 'invited' | 'inactive';
-  lastSeen: string;
+  last_seen: string | null;
 }
 
 interface SKU {
   code: string;
   species: string;
-  grade: string;
-  packType: string;
-  uom: string;
-  qboItem: string;
+  grade: string | null;
+  pack_type: string | null;
+  uom: string | null;
+  qbo_item: string | null;
   active: boolean;
 }
 
 interface PricingTier {
   tier: string;
   label: string;
-  terms: string;
+  terms: string | null;
+  base_multiplier: number;
   customers: string[];
-  baseMultiplier: string;
 }
 
-const SEED_USERS: User[] = [
-  {
-    id: 'u1',
-    name: 'Blake K.',
-    email: 'blake@eof.com',
-    role: 'admin',
-    location: 'SFO',
-    status: 'active',
-    lastSeen: 'Today 07:14',
-  },
-  {
-    id: 'u2',
-    name: 'Blanca M.',
-    email: 'blanca@eof.com',
-    role: 'operations',
-    location: 'SFO',
-    status: 'active',
-    lastSeen: 'Today 06:50',
-  },
-  {
-    id: 'u3',
-    name: 'Sid T.',
-    email: 'sid@eof.com',
-    role: 'logistics',
-    location: 'SFO',
-    status: 'active',
-    lastSeen: 'Today 06:02',
-  },
-  {
-    id: 'u4',
-    name: 'Finance Support',
-    email: 'finance@eof.com',
-    role: 'finance',
-    location: 'Remote',
-    status: 'active',
-    lastSeen: 'Jun 25',
-  },
-  {
-    id: 'u5',
-    name: 'Sales — LAX',
-    email: 'sales.lax@eof.com',
-    role: 'sales',
-    location: 'LAX',
-    status: 'invited',
-    lastSeen: '—',
-  },
-];
+const ROLES: Profile['role'][] = ['admin', 'operations', 'finance', 'sales', 'logistics', 'viewer'];
 
-const SEED_SKUS: SKU[] = [
-  {
-    code: 'AHI-A+',
-    species: 'Ahi Tuna',
-    grade: 'A+',
-    packType: 'Box',
-    uom: 'lb',
-    qboItem: 'Ahi Tuna – Grade A+',
-    active: true,
-  },
-  {
-    code: 'AHI-A',
-    species: 'Ahi Tuna',
-    grade: 'A',
-    packType: 'Box',
-    uom: 'lb',
-    qboItem: 'Ahi Tuna – Grade A',
-    active: true,
-  },
-  {
-    code: 'SAL-A',
-    species: 'Salmon',
-    grade: 'A',
-    packType: 'Box',
-    uom: 'lb',
-    qboItem: 'Salmon – Grade A',
-    active: true,
-  },
-  {
-    code: 'ONO-A',
-    species: 'Ono (Wahoo)',
-    grade: 'A',
-    packType: 'Box',
-    uom: 'lb',
-    qboItem: 'Ono – Grade A',
-    active: true,
-  },
-  {
-    code: 'HAM-A+',
-    species: 'Hamachi',
-    grade: 'A+',
-    packType: 'Box',
-    uom: 'lb',
-    qboItem: 'Hamachi – Grade A+',
-    active: true,
-  },
-  {
-    code: 'MAH-A',
-    species: 'Mahi-Mahi',
-    grade: 'A',
-    packType: 'Box',
-    uom: 'lb',
-    qboItem: 'Mahi-Mahi – Grade A',
-    active: false,
-  },
-];
-
-const SEED_TIERS: PricingTier[] = [
-  {
-    tier: 'T1',
-    label: 'Tier 1 — Premium',
-    terms: 'Net 15',
-    customers: ['Nobu', 'Morimoto'],
-    baseMultiplier: '1.00×',
-  },
-  {
-    tier: 'T2',
-    label: 'Tier 2 — Standard',
-    terms: 'Net 30',
-    customers: ["Roy's", "Alan Wong's"],
-    baseMultiplier: '0.95×',
-  },
-  {
-    tier: 'T3',
-    label: 'Tier 3 — COD',
-    terms: 'COD',
-    customers: ["Tiki's Grill"],
-    baseMultiplier: '0.90×',
-  },
-];
-
-const ROLES: User['role'][] = ['admin', 'operations', 'finance', 'sales', 'logistics', 'viewer'];
-
-const roleMeta = (r: User['role']) =>
+const roleMeta = (r: Profile['role']) =>
   ({
     admin: { label: 'Admin', color: '#2D5365', bg: '#EEF3F6' },
     operations: { label: 'Operations', color: '#2E6347', bg: '#EAF1ED' },
@@ -174,37 +46,105 @@ const roleMeta = (r: User['role']) =>
     viewer: { label: 'Viewer', color: '#8A99A3', bg: '#F4F5F6' },
   })[r];
 
-const statusMeta = (s: User['status']) =>
+const statusMeta = (s: Profile['status']) =>
   ({
     active: { label: 'Active', color: '#2E6347', bg: '#EAF1ED', dot: '#3F7D5B' },
     invited: { label: 'Invited', color: '#8A5A14', bg: '#F4EEE2', dot: '#B7791F' },
     inactive: { label: 'Inactive', color: '#8A99A3', bg: '#EEF0F2', dot: '#8A99A3' },
   })[s];
 
+function formatLastSeen(ts: string | null): string {
+  if (!ts) return '—';
+  const d = new Date(ts);
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  const diffHrs = Math.floor(diffMins / 60);
+  if (diffHrs < 24)
+    return `Today ${d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}`;
+  const diffDays = Math.floor(diffHrs / 24);
+  if (diffDays < 7) return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
 export default function AdminPage() {
+  const supabase = createClient();
   const [tab, setTab] = useState<AdminTab>('users');
-  const [users, setUsers] = useState<User[]>(SEED_USERS);
+
+  // Users
+  const [users, setUsers] = useState<Profile[]>([]);
+  const [usersLoading, setUsersLoading] = useState(true);
   const [assignModal, setAssignModal] = useState<{ open: boolean; userId: string | null }>({
     open: false,
     userId: null,
   });
-  const [selectedRole, setSelectedRole] = useState<User['role']>('viewer');
+  const [selectedRole, setSelectedRole] = useState<Profile['role']>('viewer');
+  const [savingRole, setSavingRole] = useState(false);
   const [inviteDrawer, setInviteDrawer] = useState(false);
   const [inviteForm, setInviteForm] = useState({
     name: '',
     email: '',
-    role: 'viewer' as User['role'],
+    role: 'viewer' as Profile['role'],
     location: '',
   });
+  const [inviting, setInviting] = useState(false);
+
+  // SKUs
+  const [skus, setSkus] = useState<SKU[]>([]);
+  const [skusLoading, setSkusLoading] = useState(true);
+
+  // Pricing tiers
+  const [tiers, setTiers] = useState<PricingTier[]>([]);
+  const [tiersLoading, setTiersLoading] = useState(true);
+
+  // Generic editor
   const [editor, setEditor] = useState<{ open: boolean; title: string; subtitle: string }>({
     open: false,
     title: '',
     subtitle: '',
   });
-
   const openEditor = (title: string, subtitle: string) =>
     setEditor({ open: true, title, subtitle });
   const closeEditor = () => setEditor({ open: false, title: '', subtitle: '' });
+
+  useEffect(() => {
+    fetchUsers();
+    fetchSkus();
+    fetchTiers();
+  }, []);
+
+  async function fetchUsers() {
+    setUsersLoading(true);
+    const { data } = await supabase.from('profiles').select('*').order('created_at');
+    setUsers((data as Profile[]) ?? []);
+    setUsersLoading(false);
+  }
+
+  async function fetchSkus() {
+    setSkusLoading(true);
+    const { data } = await supabase.from('skus').select('*').order('code');
+    setSkus((data as SKU[]) ?? []);
+    setSkusLoading(false);
+  }
+
+  async function fetchTiers() {
+    setTiersLoading(true);
+    const { data: tierData } = await supabase.from('pricing_tiers').select('*').order('tier');
+    const { data: custData } = await supabase.from('customers').select('name, tier');
+    const built: PricingTier[] = (tierData ?? []).map((t: Record<string, unknown>) => ({
+      tier: t.tier as string,
+      label: t.label as string,
+      terms: t.terms as string | null,
+      base_multiplier: t.base_multiplier as number,
+      customers: (custData ?? [])
+        .filter((c: Record<string, unknown>) => c.tier === t.tier)
+        .map((c: Record<string, unknown>) => c.name as string),
+    }));
+    setTiers(built);
+    setTiersLoading(false);
+  }
 
   const openAssign = (userId: string) => {
     const u = users.find((x) => x.id === userId);
@@ -212,28 +152,31 @@ export default function AdminPage() {
     setAssignModal({ open: true, userId });
   };
 
-  const applyRole = () => {
+  const applyRole = async () => {
     if (!assignModal.userId) return;
+    setSavingRole(true);
+    await supabase.from('profiles').update({ role: selectedRole }).eq('id', assignModal.userId);
     setUsers((prev) =>
       prev.map((u) => (u.id === assignModal.userId ? { ...u, role: selectedRole } : u))
     );
+    setSavingRole(false);
     setAssignModal({ open: false, userId: null });
   };
 
-  const sendInvite = () => {
+  const sendInvite = async () => {
     if (!inviteForm.name || !inviteForm.email) return;
-    const newUser: User = {
-      id: 'u' + Date.now(),
-      name: inviteForm.name,
-      email: inviteForm.email,
-      role: inviteForm.role,
-      location: inviteForm.location || 'Remote',
-      status: 'invited',
-      lastSeen: '—',
-    };
-    setUsers((prev) => [...prev, newUser]);
-    setInviteForm({ name: '', email: '', role: 'viewer', location: '' });
-    setInviteDrawer(false);
+    setInviting(true);
+    const res = await fetch('/api/admin/invite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(inviteForm),
+    });
+    setInviting(false);
+    if (res.ok) {
+      setInviteForm({ name: '', email: '', role: 'viewer', location: '' });
+      setInviteDrawer(false);
+      fetchUsers();
+    }
   };
 
   const tabStyle = (on: boolean): React.CSSProperties => ({
@@ -417,8 +360,9 @@ export default function AdminPage() {
                     color: '#8A99A3',
                   }}
                 >
-                  {users.filter((u) => u.status === 'active').length} active ·{' '}
-                  {users.filter((u) => u.status === 'invited').length} invited
+                  {usersLoading
+                    ? 'Loading…'
+                    : `${users.filter((u) => u.status === 'active').length} active · ${users.filter((u) => u.status === 'invited').length} invited`}
                 </span>
               </div>
               <div
@@ -433,7 +377,6 @@ export default function AdminPage() {
                   style={{
                     display: 'grid',
                     gridTemplateColumns: '1fr 200px 100px 80px 130px 100px 120px',
-                    gap: 0,
                     padding: '11px 18px',
                     background: '#FAFBFB',
                     borderBottom: '1px solid #E2E6E9',
@@ -451,103 +394,110 @@ export default function AdminPage() {
                   <span>LAST SEEN</span>
                   <span style={{ textAlign: 'right' }}>ACTION</span>
                 </div>
-                {users.map((u) => {
-                  const rm = roleMeta(u.role);
-                  const sm = statusMeta(u.status);
-                  return (
-                    <div
-                      key={u.id}
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: '1fr 200px 100px 80px 130px 100px 120px',
-                        gap: 0,
-                        alignItems: 'center',
-                        padding: '13px 18px',
-                        borderBottom: '1px solid #EDEFF1',
-                      }}
-                    >
-                      <div>
-                        <div style={{ fontSize: '14px', fontWeight: 600 }}>{u.name}</div>
-                      </div>
-                      <span
+                {usersLoading ? (
+                  <div style={{ padding: '24px 18px', fontSize: '13px', color: '#8A99A3' }}>
+                    Loading…
+                  </div>
+                ) : (
+                  users.map((u) => {
+                    const rm = roleMeta(u.role);
+                    const sm = statusMeta(u.status);
+                    return (
+                      <div
+                        key={u.id}
                         style={{
-                          fontFamily: "'IBM Plex Mono', monospace",
-                          fontSize: '12px',
-                          color: '#5A6670',
+                          display: 'grid',
+                          gridTemplateColumns: '1fr 200px 100px 80px 130px 100px 120px',
+                          alignItems: 'center',
+                          padding: '13px 18px',
+                          borderBottom: '1px solid #EDEFF1',
                         }}
                       >
-                        {u.email}
-                      </span>
-                      <span>
+                        <div>
+                          <div style={{ fontSize: '14px', fontWeight: 600 }}>{u.name || '—'}</div>
+                        </div>
                         <span
                           style={{
-                            fontSize: '11px',
-                            fontWeight: 700,
-                            color: rm.color,
-                            background: rm.bg,
-                            borderRadius: '3px',
-                            padding: '3px 9px',
+                            fontFamily: "'IBM Plex Mono', monospace",
+                            fontSize: '12px',
+                            color: '#5A6670',
                           }}
                         >
-                          {rm.label}
+                          {u.email}
                         </span>
-                      </span>
-                      <span style={{ fontSize: '12px', color: '#5A6670' }}>{u.location}</span>
-                      <span>
-                        <span
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            fontSize: '11px',
-                            fontWeight: 600,
-                            color: sm.color,
-                            background: sm.bg,
-                            borderRadius: '3px',
-                            padding: '3px 9px',
-                          }}
-                        >
+                        <span>
                           <span
                             style={{
-                              width: '5px',
-                              height: '5px',
-                              borderRadius: '50%',
-                              background: sm.dot,
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              color: rm.color,
+                              background: rm.bg,
+                              borderRadius: '3px',
+                              padding: '3px 9px',
                             }}
-                          />
-                          {sm.label}
+                          >
+                            {rm.label}
+                          </span>
                         </span>
-                      </span>
-                      <span
-                        style={{
-                          fontFamily: "'IBM Plex Mono', monospace",
-                          fontSize: '11px',
-                          color: '#8A99A3',
-                        }}
-                      >
-                        {u.lastSeen}
-                      </span>
-                      <span style={{ textAlign: 'right' }}>
-                        <button
-                          onClick={() => openAssign(u.id)}
+                        <span style={{ fontSize: '12px', color: '#5A6670' }}>
+                          {u.location || '—'}
+                        </span>
+                        <span>
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              fontSize: '11px',
+                              fontWeight: 600,
+                              color: sm.color,
+                              background: sm.bg,
+                              borderRadius: '3px',
+                              padding: '3px 9px',
+                            }}
+                          >
+                            <span
+                              style={{
+                                width: '5px',
+                                height: '5px',
+                                borderRadius: '50%',
+                                background: sm.dot,
+                              }}
+                            />
+                            {sm.label}
+                          </span>
+                        </span>
+                        <span
                           style={{
-                            fontFamily: "'Archivo', sans-serif",
-                            fontSize: '12px',
-                            fontWeight: 600,
-                            background: '#fff',
-                            color: '#3F6F86',
-                            border: '1px solid #C5D8E2',
-                            borderRadius: '5px',
-                            padding: '6px 12px',
-                            cursor: 'pointer',
+                            fontFamily: "'IBM Plex Mono', monospace",
+                            fontSize: '11px',
+                            color: '#8A99A3',
                           }}
                         >
-                          Assign role
-                        </button>
-                      </span>
-                    </div>
-                  );
-                })}
+                          {formatLastSeen(u.last_seen)}
+                        </span>
+                        <span style={{ textAlign: 'right' }}>
+                          <button
+                            onClick={() => openAssign(u.id)}
+                            style={{
+                              fontFamily: "'Archivo', sans-serif",
+                              fontSize: '12px',
+                              fontWeight: 600,
+                              background: '#fff',
+                              color: '#3F6F86',
+                              border: '1px solid #C5D8E2',
+                              borderRadius: '5px',
+                              padding: '6px 12px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            Assign role
+                          </button>
+                        </span>
+                      </div>
+                    );
+                  })
+                )}
               </div>
             </div>
           )}
@@ -555,12 +505,8 @@ export default function AdminPage() {
           {/* SKU MASTER TAB */}
           {tab === 'sku' && (
             <div style={{ maxWidth: '1000px' }}>
-              <div
-                style={{ marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '10px' }}
-              >
-                <div style={{ fontSize: '13px', color: '#5A6670' }}>
-                  Master Item Index — used for inventory, invoicing, and QBO item mapping.
-                </div>
+              <div style={{ marginBottom: '14px', fontSize: '13px', color: '#5A6670' }}>
+                Master Item Index — used for inventory, invoicing, and QBO item mapping.
               </div>
               <div
                 style={{
@@ -574,7 +520,6 @@ export default function AdminPage() {
                   style={{
                     display: 'grid',
                     gridTemplateColumns: '110px 1fr 70px 90px 60px 1fr 80px',
-                    gap: 0,
                     padding: '11px 18px',
                     background: '#FAFBFB',
                     borderBottom: '1px solid #E2E6E9',
@@ -592,59 +537,68 @@ export default function AdminPage() {
                   <span>QBO ITEM NAME</span>
                   <span>STATUS</span>
                 </div>
-                {SEED_SKUS.map((s) => (
-                  <div
-                    key={s.code}
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: '110px 1fr 70px 90px 60px 1fr 80px',
-                      gap: 0,
-                      alignItems: 'center',
-                      padding: '13px 18px',
-                      borderBottom: '1px solid #EDEFF1',
-                      borderLeft: `3px solid ${s.active ? '#3F7D5B' : '#D6DCE0'}`,
-                    }}
-                  >
-                    <span
+                {skusLoading ? (
+                  <div style={{ padding: '24px 18px', fontSize: '13px', color: '#8A99A3' }}>
+                    Loading…
+                  </div>
+                ) : (
+                  skus.map((s) => (
+                    <div
+                      key={s.code}
                       style={{
-                        fontFamily: "'IBM Plex Mono', monospace",
-                        fontSize: '12px',
-                        fontWeight: 600,
+                        display: 'grid',
+                        gridTemplateColumns: '110px 1fr 70px 90px 60px 1fr 80px',
+                        alignItems: 'center',
+                        padding: '13px 18px',
+                        borderBottom: '1px solid #EDEFF1',
+                        borderLeft: `3px solid ${s.active ? '#3F7D5B' : '#D6DCE0'}`,
                       }}
                     >
-                      {s.code}
-                    </span>
-                    <span style={{ fontSize: '14px', fontWeight: 600 }}>{s.species}</span>
-                    <span style={{ fontSize: '12px', color: '#5A6670', fontWeight: 600 }}>
-                      {s.grade}
-                    </span>
-                    <span style={{ fontSize: '12px', color: '#5A6670' }}>{s.packType}</span>
-                    <span
-                      style={{
-                        fontFamily: "'IBM Plex Mono', monospace",
-                        fontSize: '12px',
-                        color: '#5A6670',
-                      }}
-                    >
-                      {s.uom}
-                    </span>
-                    <span style={{ fontSize: '12px', color: '#5A6670' }}>{s.qboItem}</span>
-                    <span>
                       <span
                         style={{
-                          fontSize: '11px',
+                          fontFamily: "'IBM Plex Mono', monospace",
+                          fontSize: '12px',
                           fontWeight: 600,
-                          color: s.active ? '#2E6347' : '#8A99A3',
-                          background: s.active ? '#EAF1ED' : '#EEF0F2',
-                          borderRadius: '3px',
-                          padding: '3px 9px',
                         }}
                       >
-                        {s.active ? 'Active' : 'Inactive'}
+                        {s.code}
                       </span>
-                    </span>
-                  </div>
-                ))}
+                      <span style={{ fontSize: '14px', fontWeight: 600 }}>{s.species}</span>
+                      <span style={{ fontSize: '12px', color: '#5A6670', fontWeight: 600 }}>
+                        {s.grade || '—'}
+                      </span>
+                      <span style={{ fontSize: '12px', color: '#5A6670' }}>
+                        {s.pack_type || '—'}
+                      </span>
+                      <span
+                        style={{
+                          fontFamily: "'IBM Plex Mono', monospace",
+                          fontSize: '12px',
+                          color: '#5A6670',
+                        }}
+                      >
+                        {s.uom || '—'}
+                      </span>
+                      <span style={{ fontSize: '12px', color: '#5A6670' }}>
+                        {s.qbo_item || '—'}
+                      </span>
+                      <span>
+                        <span
+                          style={{
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            color: s.active ? '#2E6347' : '#8A99A3',
+                            background: s.active ? '#EAF1ED' : '#EEF0F2',
+                            borderRadius: '3px',
+                            padding: '3px 9px',
+                          }}
+                        >
+                          {s.active ? 'Active' : 'Inactive'}
+                        </span>
+                      </span>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           )}
@@ -654,172 +608,179 @@ export default function AdminPage() {
             <div
               style={{ maxWidth: '900px', display: 'flex', flexDirection: 'column', gap: '12px' }}
             >
-              {SEED_TIERS.map((t) => (
-                <div
-                  key={t.tier}
-                  style={{
-                    background: '#fff',
-                    border: '1px solid #E2E6E9',
-                    borderLeft: '3px solid #3F6F86',
-                    borderRadius: '8px',
-                    padding: '20px 22px',
-                  }}
-                >
+              {tiersLoading ? (
+                <div style={{ fontSize: '13px', color: '#8A99A3' }}>Loading…</div>
+              ) : (
+                tiers.map((t) => (
                   <div
+                    key={t.tier}
                     style={{
-                      display: 'flex',
-                      alignItems: 'flex-start',
-                      justifyContent: 'space-between',
-                      gap: '20px',
-                    }}
-                  >
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <span
-                          style={{
-                            fontFamily: "'IBM Plex Mono', monospace",
-                            fontSize: '13px',
-                            fontWeight: 700,
-                            color: '#3F6F86',
-                          }}
-                        >
-                          {t.tier}
-                        </span>
-                        <span style={{ fontSize: '15px', fontWeight: 700 }}>{t.label}</span>
-                      </div>
-                      <div style={{ display: 'flex', gap: '18px', marginTop: '10px' }}>
-                        <div>
-                          <div
-                            style={{
-                              fontSize: '10px',
-                              fontWeight: 700,
-                              letterSpacing: '0.05em',
-                              color: '#8A99A3',
-                            }}
-                          >
-                            PAYMENT TERMS
-                          </div>
-                          <div
-                            style={{
-                              fontFamily: "'IBM Plex Mono', monospace",
-                              fontSize: '13px',
-                              marginTop: '3px',
-                              fontWeight: 600,
-                            }}
-                          >
-                            {t.terms}
-                          </div>
-                        </div>
-                        <div>
-                          <div
-                            style={{
-                              fontSize: '10px',
-                              fontWeight: 700,
-                              letterSpacing: '0.05em',
-                              color: '#8A99A3',
-                            }}
-                          >
-                            PRICE MULTIPLIER
-                          </div>
-                          <div
-                            style={{
-                              fontFamily: "'IBM Plex Mono', monospace",
-                              fontSize: '13px',
-                              marginTop: '3px',
-                              fontWeight: 600,
-                            }}
-                          >
-                            {t.baseMultiplier}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() =>
-                        openEditor(
-                          `Edit ${t.label}`,
-                          'Adjust payment terms, price multiplier, and effective dates.'
-                        )
-                      }
-                      style={{
-                        fontFamily: "'Archivo', sans-serif",
-                        fontSize: '12px',
-                        fontWeight: 600,
-                        background: '#fff',
-                        color: '#3F6F86',
-                        border: '1px solid #C5D8E2',
-                        borderRadius: '5px',
-                        padding: '7px 13px',
-                        cursor: 'pointer',
-                        flex: 'none',
-                      }}
-                    >
-                      Edit tier
-                    </button>
-                  </div>
-                  <div
-                    style={{
-                      marginTop: '14px',
-                      paddingTop: '14px',
-                      borderTop: '1px solid #EDEFF1',
+                      background: '#fff',
+                      border: '1px solid #E2E6E9',
+                      borderLeft: '3px solid #3F6F86',
+                      borderRadius: '8px',
+                      padding: '20px 22px',
                     }}
                   >
                     <div
                       style={{
-                        fontSize: '11px',
-                        fontWeight: 700,
-                        letterSpacing: '0.05em',
-                        color: '#8A99A3',
-                        marginBottom: '8px',
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        justifyContent: 'space-between',
+                        gap: '20px',
                       }}
                     >
-                      ASSIGNED CUSTOMERS
-                    </div>
-                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                      {t.customers.map((c) => (
-                        <span
-                          key={c}
-                          style={{
-                            fontSize: '12px',
-                            fontWeight: 600,
-                            color: '#222A30',
-                            background: '#EEF3F6',
-                            border: '1px solid #C5D8E2',
-                            borderRadius: '4px',
-                            padding: '4px 11px',
-                          }}
-                        >
-                          {c}
-                        </span>
-                      ))}
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <span
+                            style={{
+                              fontFamily: "'IBM Plex Mono', monospace",
+                              fontSize: '13px',
+                              fontWeight: 700,
+                              color: '#3F6F86',
+                            }}
+                          >
+                            {t.tier}
+                          </span>
+                          <span style={{ fontSize: '15px', fontWeight: 700 }}>{t.label}</span>
+                        </div>
+                        <div style={{ display: 'flex', gap: '18px', marginTop: '10px' }}>
+                          <div>
+                            <div
+                              style={{
+                                fontSize: '10px',
+                                fontWeight: 700,
+                                letterSpacing: '0.05em',
+                                color: '#8A99A3',
+                              }}
+                            >
+                              PAYMENT TERMS
+                            </div>
+                            <div
+                              style={{
+                                fontFamily: "'IBM Plex Mono', monospace",
+                                fontSize: '13px',
+                                marginTop: '3px',
+                                fontWeight: 600,
+                              }}
+                            >
+                              {t.terms || '—'}
+                            </div>
+                          </div>
+                          <div>
+                            <div
+                              style={{
+                                fontSize: '10px',
+                                fontWeight: 700,
+                                letterSpacing: '0.05em',
+                                color: '#8A99A3',
+                              }}
+                            >
+                              PRICE MULTIPLIER
+                            </div>
+                            <div
+                              style={{
+                                fontFamily: "'IBM Plex Mono', monospace",
+                                fontSize: '13px',
+                                marginTop: '3px',
+                                fontWeight: 600,
+                              }}
+                            >
+                              {t.base_multiplier.toFixed(2)}×
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                       <button
                         onClick={() =>
                           openEditor(
-                            `Assign customer to ${t.label}`,
-                            'Select a customer to add to this pricing tier.'
+                            `Edit ${t.label}`,
+                            'Adjust payment terms, price multiplier, and effective dates.'
                           )
                         }
                         style={{
+                          fontFamily: "'Archivo', sans-serif",
                           fontSize: '12px',
                           fontWeight: 600,
-                          color: '#8A99A3',
-                          background: 'none',
-                          border: '1px dashed #D6DCE0',
-                          borderRadius: '4px',
-                          padding: '4px 11px',
+                          background: '#fff',
+                          color: '#3F6F86',
+                          border: '1px solid #C5D8E2',
+                          borderRadius: '5px',
+                          padding: '7px 13px',
                           cursor: 'pointer',
+                          flex: 'none',
                         }}
                       >
-                        + Add customer
+                        Edit tier
                       </button>
                     </div>
+                    <div
+                      style={{
+                        marginTop: '14px',
+                        paddingTop: '14px',
+                        borderTop: '1px solid #EDEFF1',
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          letterSpacing: '0.05em',
+                          color: '#8A99A3',
+                          marginBottom: '8px',
+                        }}
+                      >
+                        ASSIGNED CUSTOMERS
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        {t.customers.length === 0 && (
+                          <span style={{ fontSize: '12px', color: '#8A99A3' }}>None assigned</span>
+                        )}
+                        {t.customers.map((c) => (
+                          <span
+                            key={c}
+                            style={{
+                              fontSize: '12px',
+                              fontWeight: 600,
+                              color: '#222A30',
+                              background: '#EEF3F6',
+                              border: '1px solid #C5D8E2',
+                              borderRadius: '4px',
+                              padding: '4px 11px',
+                            }}
+                          >
+                            {c}
+                          </span>
+                        ))}
+                        <button
+                          onClick={() =>
+                            openEditor(
+                              `Assign customer to ${t.label}`,
+                              'Select a customer to add to this pricing tier.'
+                            )
+                          }
+                          style={{
+                            fontSize: '12px',
+                            fontWeight: 600,
+                            color: '#8A99A3',
+                            background: 'none',
+                            border: '1px dashed #D6DCE0',
+                            borderRadius: '4px',
+                            padding: '4px 11px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          + Add customer
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           )}
 
-          {/* VENDOR MAPPINGS TAB */}
+          {/* VENDOR MAPPINGS TAB — static config, no live data yet */}
           {tab === 'mappings' && (
             <div style={{ maxWidth: '860px' }}>
               <div style={{ marginBottom: '18px', fontSize: '13px', color: '#5A6670' }}>
@@ -837,7 +798,6 @@ export default function AdminPage() {
                   style={{
                     display: 'grid',
                     gridTemplateColumns: '1fr 120px 120px 120px 120px 100px',
-                    gap: 0,
                     padding: '11px 18px',
                     background: '#FAFBFB',
                     borderBottom: '1px solid #E2E6E9',
@@ -882,7 +842,6 @@ export default function AdminPage() {
                     style={{
                       display: 'grid',
                       gridTemplateColumns: '1fr 120px 120px 120px 120px 100px',
-                      gap: 0,
                       alignItems: 'center',
                       padding: '13px 18px',
                       borderBottom: '1px solid #EDEFF1',
@@ -906,7 +865,7 @@ export default function AdminPage() {
                         onClick={() =>
                           openEditor(
                             `${m.vendor} — column mapping`,
-                            'Map this vendor’s CSV/Excel columns to box, weight, species, and grade fields.'
+                            "Map this vendor's CSV/Excel columns to box, weight, species, and grade fields."
                           )
                         }
                         style={{
@@ -930,7 +889,7 @@ export default function AdminPage() {
             </div>
           )}
 
-          {/* INTEGRATIONS TAB */}
+          {/* INTEGRATIONS TAB — static status display */}
           {tab === 'integrations' && (
             <div
               style={{ maxWidth: '780px', display: 'flex', flexDirection: 'column', gap: '12px' }}
@@ -938,16 +897,25 @@ export default function AdminPage() {
               {[
                 {
                   name: 'QuickBooks Online',
-                  status: 'connected',
-                  detail: 'Last sync · today 06:02 · 3 invoices pending',
-                  color: '#3F7D5B',
-                  bg: '#EAF1ED',
-                  dot: '#3F7D5B',
+                  status: 'not configured',
+                  detail: 'Connect QBO to enable invoice sync and credit memo automation',
+                  color: '#8A99A3',
+                  bg: '#EEF0F2',
+                  dot: '#8A99A3',
                 },
                 {
-                  name: 'Email — Resend',
+                  name: 'Gmail API',
+                  status: 'not configured',
+                  detail:
+                    'Connect Gmail to send vendor statements and parse incoming packing lists',
+                  color: '#8A99A3',
+                  bg: '#EEF0F2',
+                  dot: '#8A99A3',
+                },
+                {
+                  name: 'Supabase Storage',
                   status: 'connected',
-                  detail: 'Transactional email active · domain verified',
+                  detail: 'File storage active · vendor packing lists, BOLs, pick-slip PDFs',
                   color: '#3F7D5B',
                   bg: '#EAF1ED',
                   dot: '#3F7D5B',
@@ -963,19 +931,10 @@ export default function AdminPage() {
                 {
                   name: 'Main Freight / 3PL',
                   status: 'manual handoff',
-                  detail:
-                    'API integration pending validation · using structured email + pick slip export',
+                  detail: 'API integration pending · using structured email + pick slip export',
                   color: '#8A5A14',
                   bg: '#F4EEE2',
                   dot: '#B7791F',
-                },
-                {
-                  name: 'Supabase Storage',
-                  status: 'connected',
-                  detail: 'File storage active · vendor packing lists, BOLs, exports',
-                  color: '#3F7D5B',
-                  bg: '#EAF1ED',
-                  dot: '#3F7D5B',
                 },
                 {
                   name: 'Bill.com',
@@ -1183,19 +1142,20 @@ export default function AdminPage() {
               </button>
               <button
                 onClick={applyRole}
+                disabled={savingRole}
                 style={{
                   fontFamily: "'Archivo', sans-serif",
                   fontSize: '13px',
                   fontWeight: 600,
-                  background: '#222A30',
+                  background: savingRole ? '#8A99A3' : '#222A30',
                   color: '#fff',
                   border: 'none',
                   borderRadius: '5px',
                   padding: '10px 18px',
-                  cursor: 'pointer',
+                  cursor: savingRole ? 'not-allowed' : 'pointer',
                 }}
               >
-                Apply role
+                {savingRole ? 'Saving…' : 'Apply role'}
               </button>
             </div>
           </div>
@@ -1277,62 +1237,18 @@ export default function AdminPage() {
               }}
             >
               <div>
-                <label
-                  style={{
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    letterSpacing: '0.06em',
-                    color: '#8A99A3',
-                    display: 'block',
-                    marginBottom: '6px',
-                  }}
-                >
-                  FULL NAME *
-                </label>
+                <label style={labelStyle}>FULL NAME *</label>
                 <input
-                  style={{
-                    fontFamily: "'Archivo', sans-serif",
-                    fontSize: '13px',
-                    border: '1px solid #D6DCE0',
-                    borderRadius: '5px',
-                    padding: '9px 12px',
-                    width: '100%',
-                    boxSizing: 'border-box',
-                    color: '#222A30',
-                    background: '#fff',
-                    outline: 'none',
-                  }}
+                  style={inputStyle}
                   placeholder="e.g. Sales — LAX"
                   value={inviteForm.name}
                   onChange={(e) => setInviteForm((f) => ({ ...f, name: e.target.value }))}
                 />
               </div>
               <div>
-                <label
-                  style={{
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    letterSpacing: '0.06em',
-                    color: '#8A99A3',
-                    display: 'block',
-                    marginBottom: '6px',
-                  }}
-                >
-                  EMAIL *
-                </label>
+                <label style={labelStyle}>EMAIL *</label>
                 <input
-                  style={{
-                    fontFamily: "'Archivo', sans-serif",
-                    fontSize: '13px',
-                    border: '1px solid #D6DCE0',
-                    borderRadius: '5px',
-                    padding: '9px 12px',
-                    width: '100%',
-                    boxSizing: 'border-box',
-                    color: '#222A30',
-                    background: '#fff',
-                    outline: 'none',
-                  }}
+                  style={inputStyle}
                   type="email"
                   placeholder="user@eof.com"
                   value={inviteForm.email}
@@ -1340,34 +1256,12 @@ export default function AdminPage() {
                 />
               </div>
               <div>
-                <label
-                  style={{
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    letterSpacing: '0.06em',
-                    color: '#8A99A3',
-                    display: 'block',
-                    marginBottom: '6px',
-                  }}
-                >
-                  ROLE
-                </label>
+                <label style={labelStyle}>ROLE</label>
                 <select
-                  style={{
-                    fontFamily: "'Archivo', sans-serif",
-                    fontSize: '13px',
-                    border: '1px solid #D6DCE0',
-                    borderRadius: '5px',
-                    padding: '9px 12px',
-                    width: '100%',
-                    boxSizing: 'border-box',
-                    color: '#222A30',
-                    background: '#fff',
-                    outline: 'none',
-                  }}
+                  style={inputStyle}
                   value={inviteForm.role}
                   onChange={(e) =>
-                    setInviteForm((f) => ({ ...f, role: e.target.value as User['role'] }))
+                    setInviteForm((f) => ({ ...f, role: e.target.value as Profile['role'] }))
                   }
                 >
                   {ROLES.map((r) => (
@@ -1378,31 +1272,9 @@ export default function AdminPage() {
                 </select>
               </div>
               <div>
-                <label
-                  style={{
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    letterSpacing: '0.06em',
-                    color: '#8A99A3',
-                    display: 'block',
-                    marginBottom: '6px',
-                  }}
-                >
-                  LOCATION
-                </label>
+                <label style={labelStyle}>LOCATION</label>
                 <input
-                  style={{
-                    fontFamily: "'Archivo', sans-serif",
-                    fontSize: '13px',
-                    border: '1px solid #D6DCE0',
-                    borderRadius: '5px',
-                    padding: '9px 12px',
-                    width: '100%',
-                    boxSizing: 'border-box',
-                    color: '#222A30',
-                    background: '#fff',
-                    outline: 'none',
-                  }}
+                  style={inputStyle}
                   placeholder="SFO · LAX · Remote"
                   value={inviteForm.location}
                   onChange={(e) => setInviteForm((f) => ({ ...f, location: e.target.value }))}
@@ -1437,26 +1309,27 @@ export default function AdminPage() {
               </button>
               <button
                 onClick={sendInvite}
+                disabled={inviting}
                 style={{
                   fontFamily: "'Archivo', sans-serif",
                   fontSize: '13px',
                   fontWeight: 600,
-                  background: '#222A30',
+                  background: inviting ? '#8A99A3' : '#222A30',
                   color: '#fff',
                   border: 'none',
                   borderRadius: '5px',
                   padding: '10px 18px',
-                  cursor: 'pointer',
+                  cursor: inviting ? 'not-allowed' : 'pointer',
                 }}
               >
-                Send invite
+                {inviting ? 'Sending…' : 'Send invite'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* GENERIC EDITOR MODAL (tiers, mappings, integrations) */}
+      {/* GENERIC EDITOR MODAL */}
       {editor.open && (
         <div
           style={{
@@ -1507,32 +1380,9 @@ export default function AdminPage() {
                 textAlign: 'center',
               }}
             >
-              Configuration form — wired to backend during implementation phase.
+              Configuration form — wired to backend in a later slice.
             </div>
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'flex-end',
-                gap: '10px',
-                marginTop: '22px',
-              }}
-            >
-              <button
-                onClick={closeEditor}
-                style={{
-                  fontFamily: "'Archivo', sans-serif",
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  background: '#fff',
-                  color: '#5A6670',
-                  border: '1px solid #D6DCE0',
-                  borderRadius: '5px',
-                  padding: '10px 16px',
-                  cursor: 'pointer',
-                }}
-              >
-                Cancel
-              </button>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '22px' }}>
               <button
                 onClick={closeEditor}
                 style={{
@@ -1547,7 +1397,7 @@ export default function AdminPage() {
                   cursor: 'pointer',
                 }}
               >
-                Save
+                Close
               </button>
             </div>
           </div>

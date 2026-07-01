@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -19,9 +20,13 @@ export default function LoginPage() {
     }
     setError('');
     setLoading(true);
-    // Simulate auth — replace with Supabase Auth / Clerk call
-    await new Promise((r) => setTimeout(r, 900));
+    const supabase = createClient();
+    const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
+    if (authError) {
+      setError('Invalid email or password.');
+      return;
+    }
     router.push('/mana/allocation-board');
   };
 
@@ -57,53 +62,26 @@ export default function LoginPage() {
         <div
           style={{
             display: 'flex',
+            flexDirection: 'column',
             alignItems: 'center',
-            gap: '13px',
+            gap: '10px',
             marginBottom: '36px',
-            justifyContent: 'center',
           }}
         >
+          <img
+            src="/logo.png"
+            alt="MANA Seafood"
+            style={{ width: '190px', height: 'auto', display: 'block' }}
+          />
           <div
             style={{
-              width: '96px',
-              height: '96px',
-              borderRadius: '12px',
-              overflow: 'hidden',
-              flex: 'none',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
+              fontSize: '10px',
+              fontWeight: 600,
+              letterSpacing: '0.22em',
+              color: '#8A99A3',
             }}
           >
-            <img
-              src="/logo.png"
-              alt="MANA"
-              style={{
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover',
-                objectPosition: 'center',
-                transform: 'scale(1.6)',
-              }}
-            />
-          </div>
-          <div>
-            <div
-              style={{ fontSize: '20px', fontWeight: 700, letterSpacing: '0.01em', lineHeight: 1 }}
-            >
-              MANA
-            </div>
-            <div
-              style={{
-                fontSize: '9px',
-                fontWeight: 600,
-                letterSpacing: '0.18em',
-                color: '#8A99A3',
-                marginTop: '4px',
-              }}
-            >
-              OPERATIONS
-            </div>
+            OPERATIONS
           </div>
         </div>
 

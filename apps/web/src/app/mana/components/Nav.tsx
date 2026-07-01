@@ -443,52 +443,50 @@ export default function Nav() {
           <div style={{ fontSize: '11px', color: '#8A99A3', marginTop: '2px' }}>Owner · SFO</div>
         </div>
       </div>
+
+      {/* logout */}
+      <div style={{ flex: 'none', padding: '0 10px 12px' }}>
+        <a
+          href="/login"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '9px',
+            padding: '8px 10px',
+            borderRadius: '6px',
+            color: '#8A99A3',
+            textDecoration: 'none',
+            fontSize: '12px',
+            fontWeight: 500,
+            cursor: 'pointer',
+            transition: 'background 0.12s, color 0.12s',
+          }}
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLAnchorElement).style.background = '#FBF0EF';
+            (e.currentTarget as HTMLAnchorElement).style.color = '#A5362C';
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLAnchorElement).style.background = 'transparent';
+            (e.currentTarget as HTMLAnchorElement).style.color = '#8A99A3';
+          }}
+        >
+          <svg
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
+          </svg>
+          Sign out
+        </a>
+      </div>
     </div>
   );
 }
-
-{
-  /* logout */
-}
-<div style={{ flex: 'none', padding: '0 10px 12px' }}>
-  <a
-    href="/login"
-    style={{
-      display: 'flex',
-      alignItems: 'center',
-      gap: '9px',
-      padding: '8px 10px',
-      borderRadius: '6px',
-      color: '#8A99A3',
-      textDecoration: 'none',
-      fontSize: '12px',
-      fontWeight: 500,
-      cursor: 'pointer',
-      transition: 'background 0.12s, color 0.12s',
-    }}
-    onMouseEnter={(e) => {
-      (e.currentTarget as HTMLAnchorElement).style.background = '#FBF0EF';
-      (e.currentTarget as HTMLAnchorElement).style.color = '#A5362C';
-    }}
-    onMouseLeave={(e) => {
-      (e.currentTarget as HTMLAnchorElement).style.background = 'transparent';
-      (e.currentTarget as HTMLAnchorElement).style.color = '#8A99A3';
-    }}
-  >
-    <svg
-      width="15"
-      height="15"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
-      <polyline points="16 17 21 12 16 7" />
-      <line x1="21" y1="12" x2="9" y2="12" />
-    </svg>
-    Sign out
-  </a>
-</div>;
