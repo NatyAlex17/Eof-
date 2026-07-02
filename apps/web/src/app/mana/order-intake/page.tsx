@@ -4,8 +4,7 @@ import { useState, useEffect } from 'react';
 import Nav from '../components/Nav';
 
 interface Customer {
-  tier: string;
-  mult: number;
+  tier: 'T1' | 'T2' | 'T3';
   carrier: string;
   terms: string;
 }
@@ -16,21 +15,35 @@ interface LineItem {
   qty: number;
 }
 
-const customers: Record<string, Customer> = {
-  Nobu: { tier: 'Tier 1', mult: 0.95, carrier: 'Air Cargo', terms: 'Net 15' },
-  Morimoto: { tier: 'Tier 1', mult: 0.95, carrier: 'Air Cargo', terms: 'Net 15' },
-  "Roy's": { tier: 'Tier 2', mult: 1.0, carrier: 'Ground', terms: 'Net 30' },
-  "Alan Wong's": { tier: 'Tier 2', mult: 1.0, carrier: 'Ground', terms: 'Net 30' },
-  "Hy's Steakhouse": { tier: 'Tier 2', mult: 1.0, carrier: 'Ground', terms: 'Net 30' },
-  "Tiki's Grill": { tier: 'Tier 3', mult: 1.08, carrier: 'Will Call', terms: 'COD' },
+// Pricing tiers — single source of truth (mirrors pricing_tiers table)
+const TIERS: Record<Customer['tier'], { label: string; mult: number }> = {
+  T1: { label: 'Tier 1', mult: 0.95 },
+  T2: { label: 'Tier 2', mult: 1.0 },
+  T3: { label: 'Tier 3', mult: 1.08 },
 };
 
-const speciesBase: Record<string, number> = {
-  'Ahi Tuna': 28.5,
-  Ono: 22.0,
-  Salmon: 16.5,
-  Hamachi: 26.0,
-  Kanpachi: 24.0,
+const customers: Record<string, Customer> = {
+  Nobu: { tier: 'T1', carrier: 'Air Cargo', terms: 'Net 15' },
+  Morimoto: { tier: 'T1', carrier: 'Air Cargo', terms: 'Net 15' },
+  "Roy's": { tier: 'T2', carrier: 'Ground', terms: 'Net 30' },
+  "Alan Wong's": { tier: 'T2', carrier: 'Ground', terms: 'Net 30' },
+  "Hy's Steakhouse": { tier: 'T2', carrier: 'Ground', terms: 'Net 30' },
+  "Tiki's Grill": { tier: 'T3', carrier: 'Will Call', terms: 'COD' },
+};
+
+// SKU master — species base price per lb (mirrors skus table)
+const SKUS: Record<string, { code: string; basePrice: number }> = {
+  'Ahi Tuna': { code: 'AHI-A+', basePrice: 28.5 },
+  Ono: { code: 'ONO-A', basePrice: 22.0 },
+  Salmon: { code: 'SAL-A', basePrice: 16.5 },
+  Hamachi: { code: 'HAM-A+', basePrice: 26.0 },
+  Kanpachi: { code: 'KAN-A', basePrice: 24.0 },
+};
+
+// Customer-specific price overrides — beat tier pricing (mirrors price_overrides)
+const PRICE_OVERRIDES: Record<string, Record<string, number>> = {
+  Nobu: { 'Ahi Tuna': 24.5 },
+  "Roy's": { Ono: 17.0 },
 };
 
 export default function OrderIntakePage() {
@@ -135,13 +148,22 @@ export default function OrderIntakePage() {
   const customerName = customer || typedName;
   const cust = customer ? customers[customer] : null;
   const hasCustomer = !!cust;
-  const mult = cust ? cust.mult : 1.0;
+  const tierMeta = cust ? TIERS[cust.tier] : TIERS.T2; // new customers = standard tier
+  const mult = tierMeta.mult;
 
-  // Priced lines + totals
+  // Priced lines: customer override wins, else SKU base × tier multiplier
   const pricedLines = lines.map((l) => {
-    const base = speciesBase[l.species] || 0;
-    const price = base * mult;
-    return { ...l, price, subtotal: price * l.qty };
+    const sku = SKUS[l.species];
+    const base = sku?.basePrice || 0;
+    const override = customer ? PRICE_OVERRIDES[customer]?.[l.species] : undefined;
+    const price = override ?? base * mult;
+    return {
+      ...l,
+      price,
+      subtotal: price * l.qty,
+      skuCode: sku?.code || '—',
+      hasOverride: override !== undefined,
+    };
   });
   const grandTotal = pricedLines.reduce((a, l) => a + l.subtotal, 0);
   const totalLb = lines.reduce((a, l) => a + l.qty, 0);
@@ -364,7 +386,7 @@ export default function OrderIntakePage() {
                         color: '#2D5365',
                       }}
                     >
-                      {cust?.tier}
+                      {tierMeta.label} · {mult.toFixed(2)}×
                     </div>
                   </div>
                   <div style={{ width: '1px', background: '#BBD0DB' }}></div>
@@ -490,7 +512,7 @@ export default function OrderIntakePage() {
                   </span>
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '9px' }}>
-                  {Object.keys(speciesBase).map((s) => {
+                  {Object.keys(SKUS).map((s) => {
                     const on = lines.some((l) => l.species === s);
                     return (
                       <button
@@ -580,9 +602,43 @@ export default function OrderIntakePage() {
                         }}
                       >
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: '15px', fontWeight: 700 }}>{l.species}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                            <span style={{ fontSize: '15px', fontWeight: 700 }}>{l.species}</span>
+                            <span
+                              style={{
+                                fontFamily: "'IBM Plex Mono', monospace",
+                                fontSize: '9px',
+                                fontWeight: 600,
+                                color: '#8A99A3',
+                                border: '1px solid #E2E6E9',
+                                borderRadius: '2px',
+                                padding: '1px 5px',
+                              }}
+                            >
+                              {l.skuCode}
+                            </span>
+                            {l.hasOverride && (
+                              <span
+                                style={{
+                                  fontSize: '9px',
+                                  fontWeight: 700,
+                                  letterSpacing: '0.04em',
+                                  color: '#2D5365',
+                                  background: '#EEF3F6',
+                                  border: '1px solid #BBD0DB',
+                                  borderRadius: '2px',
+                                  padding: '1px 6px',
+                                }}
+                              >
+                                OVERRIDE
+                              </span>
+                            )}
+                          </div>
                           <div style={{ fontSize: '11px', color: '#8A99A3', marginTop: '2px' }}>
-                            @ {money(l.price)}/lb · {money(l.subtotal)}
+                            @ {money(l.price)}/lb
+                            {l.hasOverride
+                              ? ' (customer price)'
+                              : ` (base × ${mult.toFixed(2)})`} · {money(l.subtotal)}
                           </div>
                         </div>
                         {/* compact stepper */}
@@ -841,7 +897,7 @@ export default function OrderIntakePage() {
                   </div>
                   <div style={{ fontSize: '12px', color: '#8A99A3', marginTop: '3px' }}>
                     {cust
-                      ? `${cust.tier} · ${cust.terms}`
+                      ? `${tierMeta.label} · ${cust.terms}`
                       : isNewCustomer
                         ? 'New customer · standard pricing'
                         : 'Tier & carrier auto-fill on select'}

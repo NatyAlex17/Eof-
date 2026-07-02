@@ -1,7 +1,15 @@
 'use client';
 
+import { useState } from 'react';
 import Nav from '../components/Nav';
-import DateRangeFilter from '../components/DateRangeFilter';
+import DateRangeFilter, {
+  daysInRange,
+  selectionLabel,
+  type DateSelection,
+} from '../components/DateRangeFilter';
+
+// Per-day baselines; the date filter scales the flow KPIs (AR & credits are snapshots)
+const DAILY = { invoiced: 6886, invoices: 4.86 };
 
 const KPIS = [
   {
@@ -99,6 +107,24 @@ const money = (n: number) => {
 const moneyK = (n: number) => '$' + (n / 1000).toFixed(1) + 'k';
 
 export default function FinanceDashboardPage() {
+  const [sel, setSel] = useState<DateSelection | null>(null);
+  const days = daysInRange(sel);
+  const rangeLbl = sel ? selectionLabel(sel) : 'Last 7 days';
+
+  // Flow KPIs scale with the selected window; AR / failed / credits are snapshots
+  const kpis = KPIS.map((k, i) =>
+    i === 0
+      ? {
+          ...k,
+          label: `INVOICED · ${rangeLbl.toUpperCase()}`,
+          value: '$' + ((DAILY.invoiced * days) / 1000).toFixed(1) + 'k',
+          sub: `${Math.max(1, Math.round(DAILY.invoices * days))} invoices · ${
+            sel?.compare && sel.compare !== 'none' ? 'vs prior period ▲ 9%' : 'synced to QBO'
+          }`,
+        }
+      : k
+  );
+
   const arTotal = AR_AGING.reduce((a, b) => a + b.amount, 0);
   const maxRev = Math.max(...MARGIN_BY_SPECIES.map((m) => m.revenue));
 
@@ -144,7 +170,7 @@ export default function FinanceDashboardPage() {
               QBO connected · last sync 06:02
             </span>
           </div>
-          <DateRangeFilter defaultKey="last7" />
+          <DateRangeFilter defaultKey="last7" onChange={setSel} />
         </header>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '22px 28px' }}>
@@ -157,7 +183,7 @@ export default function FinanceDashboardPage() {
               marginBottom: '20px',
             }}
           >
-            {KPIS.map((k) => (
+            {kpis.map((k) => (
               <div
                 key={k.label}
                 style={{ ...card, borderLeft: `3px solid ${k.border}`, padding: '16px 18px' }}

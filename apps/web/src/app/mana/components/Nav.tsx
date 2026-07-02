@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
 
 type NavPage =
   | 'board'
@@ -20,6 +21,13 @@ type NavPage =
 
 export default function Nav() {
   const pathname = usePathname();
+  const router = useRouter();
+
+  const signOut = async () => {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push('/login');
+  };
 
   // Determine active page from pathname
   const getActivePage = (): NavPage => {
@@ -446,28 +454,31 @@ export default function Nav() {
 
       {/* logout */}
       <div style={{ flex: 'none', padding: '0 10px 12px' }}>
-        <a
-          href="/login"
+        <button
+          onClick={signOut}
           style={{
             display: 'flex',
             alignItems: 'center',
             gap: '9px',
+            width: '100%',
             padding: '8px 10px',
+            border: 'none',
             borderRadius: '6px',
+            background: 'transparent',
             color: '#8A99A3',
-            textDecoration: 'none',
+            fontFamily: "'Archivo', sans-serif",
             fontSize: '12px',
             fontWeight: 500,
             cursor: 'pointer',
             transition: 'background 0.12s, color 0.12s',
           }}
           onMouseEnter={(e) => {
-            (e.currentTarget as HTMLAnchorElement).style.background = '#FBF0EF';
-            (e.currentTarget as HTMLAnchorElement).style.color = '#A5362C';
+            e.currentTarget.style.background = '#FBF0EF';
+            e.currentTarget.style.color = '#A5362C';
           }}
           onMouseLeave={(e) => {
-            (e.currentTarget as HTMLAnchorElement).style.background = 'transparent';
-            (e.currentTarget as HTMLAnchorElement).style.color = '#8A99A3';
+            e.currentTarget.style.background = 'transparent';
+            e.currentTarget.style.color = '#8A99A3';
           }}
         >
           <svg
@@ -485,7 +496,7 @@ export default function Nav() {
             <line x1="21" y1="12" x2="9" y2="12" />
           </svg>
           Sign out
-        </a>
+        </button>
       </div>
     </div>
   );

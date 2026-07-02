@@ -90,6 +90,21 @@ function comparePrev(
   return { start: isoOf(ps), end: isoOf(pe) };
 }
 
+/** Inclusive day count of a selection — dashboards scale their mock KPIs by this. */
+export function daysInRange(sel: Pick<DateSelection, 'start' | 'end'> | null): number {
+  if (!sel || !sel.start || !sel.end) return 1;
+  return Math.max(
+    1,
+    Math.round((parse(sel.end).getTime() - parse(sel.start).getTime()) / 86400000) + 1
+  );
+}
+
+/** Human label like "Jun 24 – Jul 1, 2026" for a selection. */
+export function selectionLabel(sel: Pick<DateSelection, 'start' | 'end'> | null): string {
+  if (!sel || !sel.start || !sel.end) return '';
+  return rangeLabel(sel.start, sel.end);
+}
+
 const fmt = (iso: string, withYear = false) =>
   parse(iso).toLocaleDateString('en-US', {
     month: 'short',

@@ -73,6 +73,10 @@ export default function AllocationBoardPage() {
   const [isLocking, setIsLocking] = useState(false);
   const [lockedAt, setLockedAt] = useState<string>('');
   const [lockedBy, setLockedBy] = useState<string>('');
+  const [dragged, setDragged] = useState<{ lotId: string; boxId: string; content: Content } | null>(
+    null
+  );
+  const [dragOverOrderId, setDragOverOrderId] = useState<string | null>(null);
 
   // Orders now carry multiple species lines, each with its own target.
   const orders: Order[] = [
@@ -256,6 +260,22 @@ export default function AllocationBoardPage() {
     const orderTakesSpecies = selectedOrder.lines.some((ln) => ln.species === c.species);
     if (!orderTakesSpecies) return;
     assignContent(lotId, boxId, c.id, c.assignedTo === selectedOrderId ? null : selectedOrderId);
+  };
+
+  // An order can accept a dragged portion only if it has a line for that species
+  const orderAccepts = (o: Order, c: Content | undefined) =>
+    !!c && o.lines.some((ln) => ln.species === c.species);
+
+  // Drop a dragged portion onto an order card
+  const handleDropOnOrder = (o: Order) => {
+    if (isLocked || !dragged || !orderAccepts(o, dragged.content)) {
+      setDragged(null);
+      setDragOverOrderId(null);
+      return;
+    }
+    assignContent(dragged.lotId, dragged.boxId, dragged.content.id, o.id);
+    setDragged(null);
+    setDragOverOrderId(null);
   };
 
   // Split a portion into two by weight, each independently assignable
@@ -614,13 +634,31 @@ export default function AllocationBoardPage() {
                   <div
                     key={o.id}
                     onClick={() => setSelectedOrderId(o.id)}
+                    onDragOver={(e) => {
+                      if (dragged && !isLocked && orderAccepts(o, dragged.content)) {
+                        e.preventDefault();
+                        if (dragOverOrderId !== o.id) setDragOverOrderId(o.id);
+                      }
+                    }}
+                    onDragLeave={() => setDragOverOrderId((p) => (p === o.id ? null : p))}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      handleDropOnOrder(o);
+                    }}
                     style={{
-                      background: selected ? '#fff' : '#F4F5F6',
-                      border: selected ? `2px solid ${o.color}` : '1px solid #D6DCE0',
+                      background:
+                        dragOverOrderId === o.id ? '#EEF3F6' : selected ? '#fff' : '#F4F5F6',
+                      border:
+                        dragOverOrderId === o.id
+                          ? `2px dashed ${o.color}`
+                          : selected
+                            ? `2px solid ${o.color}`
+                            : '1px solid #D6DCE0',
                       borderRadius: '6px',
                       padding: '12px',
                       cursor: 'pointer',
                       transition: 'all 0.15s',
+                      opacity: dragged && !orderAccepts(o, dragged.content) ? 0.45 : 1,
                     }}
                   >
                     <div
@@ -795,7 +833,7 @@ export default function AllocationBoardPage() {
                 </span>
                 {selectedOrder && (
                   <span style={{ fontSize: '12px', color: '#8A99A3' }}>
-                    — click a matching-species portion to assign to{' '}
+                    — click or drag a matching-species portion onto{' '}
                     <span style={{ color: selectedOrder.color, fontWeight: 600 }}>
                       {selectedOrder.code}
                     </span>{' '}
@@ -927,6 +965,15 @@ export default function AllocationBoardPage() {
                                 return (
                                   <div
                                     key={c.id}
+                                    draggable={!isLocked}
+                                    onDragStart={() => {
+                                      if (!isLocked)
+                                        setDragged({ lotId: lot.id, boxId: box.id, content: c });
+                                    }}
+                                    onDragEnd={() => {
+                                      setDragged(null);
+                                      setDragOverOrderId(null);
+                                    }}
                                     onClick={() => handleContentClick(lot.id, box.id, c)}
                                     title={
                                       isLocked
