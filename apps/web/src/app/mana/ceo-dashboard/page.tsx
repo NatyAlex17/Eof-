@@ -1,9 +1,27 @@
 'use client';
 
+import { useState } from 'react';
 import Nav from '../components/Nav';
-import DateRangeFilter from '../components/DateRangeFilter';
+import DateRangeFilter, {
+  daysInRange,
+  selectionLabel,
+  type DateSelection,
+} from '../components/DateRangeFilter';
+
+// Per-day mock baselines — the date filter scales these across the chosen range
+const DAILY = { revenue: 48210, boxes: 142 };
 
 export default function CEODashboardPage() {
+  const [sel, setSel] = useState<DateSelection | null>(null);
+
+  const days = daysInRange(sel);
+  const revenue = DAILY.revenue * days;
+  const boxes = DAILY.boxes * days;
+  const comparing = sel && sel.compare !== 'none';
+  // mock deltas vs comparison period (deterministic per range length)
+  const revDelta = comparing ? (days % 2 === 0 ? 8 : 12) : 12;
+  const rangeLbl = sel ? selectionLabel(sel) : 'Today';
+
   const bar = (pct: number, color: string) => ({
     width: `${pct}%`,
     height: '100%',
@@ -190,7 +208,7 @@ export default function CEODashboardPage() {
             </span>
             <span style={{ fontSize: '12px', color: '#8A99A3' }}>Monday · June 23 · 06:14</span>
           </div>
-          <DateRangeFilter defaultKey="today" />
+          <DateRangeFilter defaultKey="today" onChange={setSel} />
         </header>
 
         <div
@@ -222,7 +240,7 @@ export default function CEODashboardPage() {
                     color: '#8A99A3',
                   }}
                 >
-                  REVENUE TODAY
+                  REVENUE · {rangeLbl.toUpperCase()}
                 </div>
                 <div
                   style={{
@@ -233,7 +251,7 @@ export default function CEODashboardPage() {
                     letterSpacing: '-0.01em',
                   }}
                 >
-                  $48,210
+                  ${revenue.toLocaleString('en-US')}
                 </div>
                 <div
                   style={{
@@ -243,7 +261,7 @@ export default function CEODashboardPage() {
                     marginTop: '6px',
                   }}
                 >
-                  ▲ 12% vs daily avg
+                  ▲ {revDelta}% {comparing ? 'vs comparison period' : 'vs daily avg'}
                 </div>
               </div>
               <div
@@ -313,7 +331,7 @@ export default function CEODashboardPage() {
                     letterSpacing: '-0.01em',
                   }}
                 >
-                  142
+                  {boxes.toLocaleString('en-US')}
                 </div>
                 <div
                   style={{
@@ -322,7 +340,7 @@ export default function CEODashboardPage() {
                     marginTop: '6px',
                   }}
                 >
-                  across SFO + LAX
+                  across SFO + LAX · {days} {days === 1 ? 'day' : 'days'}
                 </div>
               </div>
               <div

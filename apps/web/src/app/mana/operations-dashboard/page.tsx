@@ -1,7 +1,8 @@
 'use client';
 
+import { useState } from 'react';
 import Nav from '../components/Nav';
-import DateRangeFilter from '../components/DateRangeFilter';
+import DateRangeFilter, { selectionLabel, type DateSelection } from '../components/DateRangeFilter';
 
 interface Kpi {
   label: string;
@@ -99,6 +100,8 @@ const sectionTitle: React.CSSProperties = {
 };
 
 export default function OperationsDashboardPage() {
+  const [sel, setSel] = useState<DateSelection | null>(null);
+  const rangeLbl = sel ? selectionLabel(sel) : 'Today';
   const maxBar = Math.max(...ALLOC_BY_SPECIES.map((s) => s.allocated + s.available));
 
   return (
@@ -143,7 +146,7 @@ export default function OperationsDashboardPage() {
               Live · all locations
             </span>
           </div>
-          <DateRangeFilter defaultKey="today" />
+          <DateRangeFilter defaultKey="today" onChange={setSel} />
         </header>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '22px 28px' }}>
@@ -334,7 +337,7 @@ export default function OperationsDashboardPage() {
 
           {/* RECEIVING TODAY */}
           <div style={card}>
-            <div style={sectionTitle}>RECEIVED TODAY</div>
+            <div style={sectionTitle}>RECEIVED · {rangeLbl.toUpperCase()}</div>
             <div
               style={{
                 background: '#fff',

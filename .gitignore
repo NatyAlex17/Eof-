@@ -55,6 +55,9 @@ Thumbs.db
 .vercel
 next-env.d.ts
 
+# Supabase CLI local state (machine-specific, never commit)
+supabase/.temp/
+
 # Misc
 *.pem
 

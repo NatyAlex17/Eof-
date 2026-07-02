@@ -4,6 +4,23 @@ import { useState } from 'react';
 import Nav from '../components/Nav';
 
 type VendorTab = 'kona' | 'pacific' | 'island';
+type StatementStatus = 'draft' | 'sent' | 'countered' | 'settled';
+
+const STATUS_META: Record<
+  StatementStatus,
+  { label: string; color: string; bg: string; dot: string; stamp: string }
+> = {
+  draft: { label: 'Draft', color: '#5A6670', bg: '#EEF0F2', dot: '#8A99A3', stamp: 'DRAFT' },
+  sent: { label: 'Sent to vendor', color: '#2D5365', bg: '#EEF3F6', dot: '#3F6F86', stamp: 'SENT' },
+  countered: {
+    label: 'Vendor countered',
+    color: '#8A5A14',
+    bg: '#F4EEE2',
+    dot: '#B7791F',
+    stamp: 'COUNTERED',
+  },
+  settled: { label: 'Settled', color: '#2E6347', bg: '#EAF1ED', dot: '#3F7D5B', stamp: 'SETTLED' },
+};
 
 interface DocData {
   no: string;
@@ -25,16 +42,37 @@ interface DocData {
 
 export default function VendorReconciliationPage() {
   const [tab, setTab] = useState<VendorTab>('kona');
-  const [emailSent, setEmailSent] = useState(false);
+  const [statuses, setStatuses] = useState<Record<VendorTab, StatementStatus>>({
+    kona: 'sent',
+    pacific: 'draft',
+    island: 'draft',
+  });
+  const [history, setHistory] = useState<Record<VendorTab, string[]>>({
+    kona: ['Draft created · Jun 23 06:20', 'Emailed to vendor · Jun 23 07:05'],
+    pacific: ['Draft created · Jun 23 06:22'],
+    island: ['Draft created · Jun 23 06:25'],
+  });
 
   const print = () => {
     window.print();
   };
 
-  const emailVendor = () => {
-    setEmailSent(true);
-    setTimeout(() => setEmailSent(false), 2500);
+  const setStatus = (s: StatementStatus, note: string) => {
+    setStatuses((prev) => ({ ...prev, [tab]: s }));
+    setHistory((prev) => ({ ...prev, [tab]: [...prev[tab], note] }));
   };
+
+  const now = () =>
+    new Date().toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
+  const emailVendor = () => setStatus('sent', `Emailed to vendor · ${now()}`);
+  const markCountered = () => setStatus('countered', `Vendor countered · ${now()}`);
+  const markSettled = () => setStatus('settled', `Settled — approved for payment · ${now()}`);
 
   const docs: Record<VendorTab, DocData> = {
     kona: {
@@ -209,37 +247,50 @@ export default function VendorReconciliationPage() {
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <button
-              onClick={emailVendor}
+            {/* lifecycle status chip */}
+            <span
               style={{
-                display: 'flex',
+                display: 'inline-flex',
                 alignItems: 'center',
-                gap: '7px',
-                fontFamily: "'Archivo', sans-serif",
-                fontSize: '13px',
+                gap: '6px',
+                fontSize: '12px',
                 fontWeight: 600,
-                background: emailSent ? '#EAF1ED' : '#fff',
-                color: emailSent ? '#2E6347' : '#5A6670',
-                border: `1px solid ${emailSent ? '#BFD8C9' : '#D6DCE0'}`,
-                borderRadius: '5px',
-                padding: '9px 14px',
-                cursor: 'pointer',
+                color: STATUS_META[statuses[tab]].color,
+                background: STATUS_META[statuses[tab]].bg,
+                borderRadius: '4px',
+                padding: '6px 11px',
               }}
             >
-              {emailSent ? (
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.4"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M5 12l4 4 10-10" />
-                </svg>
-              ) : (
+              <span
+                style={{
+                  width: '7px',
+                  height: '7px',
+                  borderRadius: '50%',
+                  background: STATUS_META[statuses[tab]].dot,
+                }}
+              ></span>
+              {STATUS_META[statuses[tab]].label}
+            </span>
+
+            {/* lifecycle actions: Draft -> Sent -> (Countered <-> Sent) -> Settled */}
+            {statuses[tab] === 'draft' && (
+              <button
+                onClick={emailVendor}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '7px',
+                  fontFamily: "'Archivo', sans-serif",
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  background: '#3F6F86',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '5px',
+                  padding: '9px 14px',
+                  cursor: 'pointer',
+                }}
+              >
                 <svg
                   width="14"
                   height="14"
@@ -253,9 +304,81 @@ export default function VendorReconciliationPage() {
                   <path d="M4 6l8 6 8-6" />
                   <rect x="3" y="5" width="18" height="14" rx="2" />
                 </svg>
-              )}
-              {emailSent ? 'Sent to vendor' : 'Email vendor'}
-            </button>
+                Send to vendor
+              </button>
+            )}
+            {statuses[tab] === 'sent' && (
+              <>
+                <button
+                  onClick={markCountered}
+                  style={{
+                    fontFamily: "'Archivo', sans-serif",
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    background: '#fff',
+                    color: '#8A5A14',
+                    border: '1px solid #E4D2A8',
+                    borderRadius: '5px',
+                    padding: '9px 14px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Vendor countered
+                </button>
+                <button
+                  onClick={markSettled}
+                  style={{
+                    fontFamily: "'Archivo', sans-serif",
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    background: '#3F7D5B',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '5px',
+                    padding: '9px 14px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  ✓ Mark settled
+                </button>
+              </>
+            )}
+            {statuses[tab] === 'countered' && (
+              <>
+                <button
+                  onClick={emailVendor}
+                  style={{
+                    fontFamily: "'Archivo', sans-serif",
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    background: '#3F6F86',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '5px',
+                    padding: '9px 14px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Re-send revised
+                </button>
+                <button
+                  onClick={markSettled}
+                  style={{
+                    fontFamily: "'Archivo', sans-serif",
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    background: '#3F7D5B',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '5px',
+                    padding: '9px 14px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  ✓ Accept &amp; settle
+                </button>
+              </>
+            )}
             <button
               onClick={print}
               style={{
@@ -764,15 +887,15 @@ export default function VendorReconciliationPage() {
                     fontWeight: 700,
                     fontSize: '17px',
                     letterSpacing: '0.1em',
-                    color: '#B7791F',
-                    border: '3px solid #B7791F',
+                    color: STATUS_META[statuses[tab]].dot,
+                    border: `3px solid ${STATUS_META[statuses[tab]].dot}`,
                     borderRadius: '6px',
                     padding: '6px 13px',
                     transform: 'rotate(-8deg)',
                     opacity: 0.9,
                   }}
                 >
-                  CREDITS APPLIED
+                  {STATUS_META[statuses[tab]].stamp}
                 </div>
               </div>
               <div style={{ textAlign: 'right', flex: 'none' }}>
@@ -806,6 +929,52 @@ export default function VendorReconciliationPage() {
                 >
                   Terms · {doc.terms}
                 </div>
+              </div>
+            </div>
+
+            {/* ACTIVITY TRAIL — negotiation history for this statement */}
+            <div
+              className="no-print"
+              style={{
+                borderTop: '1px solid #E2E6E9',
+                background: '#FAFBFB',
+                padding: '16px 44px 20px',
+              }}
+            >
+              <div
+                style={{
+                  fontSize: '10px',
+                  fontWeight: 700,
+                  letterSpacing: '0.07em',
+                  color: '#8A99A3',
+                  marginBottom: '9px',
+                }}
+              >
+                ACTIVITY
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {history[tab].map((h, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
+                    <span
+                      style={{
+                        width: '6px',
+                        height: '6px',
+                        borderRadius: '50%',
+                        background: i === history[tab].length - 1 ? '#3F6F86' : '#C2CAD0',
+                        flex: 'none',
+                      }}
+                    ></span>
+                    <span
+                      style={{
+                        fontFamily: "'IBM Plex Mono', monospace",
+                        fontSize: '12px',
+                        color: i === history[tab].length - 1 ? '#222A30' : '#8A99A3',
+                      }}
+                    >
+                      {h}
+                    </span>
+                  </div>
+                ))}
               </div>
             </div>
           </div>

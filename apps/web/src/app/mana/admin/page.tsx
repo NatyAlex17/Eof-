@@ -99,7 +99,7 @@ export default function AdminPage() {
   const [tiers, setTiers] = useState<PricingTier[]>([]);
   const [tiersLoading, setTiersLoading] = useState(true);
 
-  // Generic editor
+  // Generic editor (still used for mappings / integrations placeholders)
   const [editor, setEditor] = useState<{ open: boolean; title: string; subtitle: string }>({
     open: false,
     title: '',
@@ -108,6 +108,60 @@ export default function AdminPage() {
   const openEditor = (title: string, subtitle: string) =>
     setEditor({ open: true, title, subtitle });
   const closeEditor = () => setEditor({ open: false, title: '', subtitle: '' });
+
+  // Real editors: SKU add + tier edit write to Supabase
+  const EMPTY_SKU = { code: '', species: '', grade: '', pack_type: 'Box', uom: 'lb', qbo_item: '' };
+  const [skuModal, setSkuModal] = useState(false);
+  const [skuForm, setSkuForm] = useState(EMPTY_SKU);
+  const [savingSku, setSavingSku] = useState(false);
+  const [skuError, setSkuError] = useState('');
+
+  const [tierModal, setTierModal] = useState<{
+    tier: string;
+    label: string;
+    terms: string;
+    mult: string;
+  } | null>(null);
+  const [savingTier, setSavingTier] = useState(false);
+
+  const saveSku = async () => {
+    if (!skuForm.code || !skuForm.species) return;
+    setSavingSku(true);
+    setSkuError('');
+    const { error } = await supabase.from('skus').insert({
+      code: skuForm.code.toUpperCase(),
+      species: skuForm.species,
+      grade: skuForm.grade || null,
+      pack_type: skuForm.pack_type || null,
+      uom: skuForm.uom || 'lb',
+      qbo_item: skuForm.qbo_item || null,
+      active: true,
+    });
+    setSavingSku(false);
+    if (error) {
+      setSkuError(
+        error.message.includes('duplicate')
+          ? `SKU ${skuForm.code.toUpperCase()} already exists.`
+          : error.message
+      );
+      return;
+    }
+    setSkuModal(false);
+    setSkuForm(EMPTY_SKU);
+    fetchSkus();
+  };
+
+  const saveTier = async () => {
+    if (!tierModal) return;
+    setSavingTier(true);
+    await supabase
+      .from('pricing_tiers')
+      .update({ terms: tierModal.terms, base_multiplier: parseFloat(tierModal.mult) || 1 })
+      .eq('tier', tierModal.tier);
+    setSavingTier(false);
+    setTierModal(null);
+    fetchTiers();
+  };
 
   useEffect(() => {
     fetchUsers();
@@ -308,12 +362,7 @@ export default function AdminPage() {
           )}
           {tab === 'sku' && (
             <button
-              onClick={() =>
-                openEditor(
-                  'Add SKU to Master Index',
-                  'Define code, species, grade, pack type, unit of measure, and QBO item name.'
-                )
-              }
+              onClick={() => setSkuModal(true)}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -693,10 +742,12 @@ export default function AdminPage() {
                       </div>
                       <button
                         onClick={() =>
-                          openEditor(
-                            `Edit ${t.label}`,
-                            'Adjust payment terms, price multiplier, and effective dates.'
-                          )
+                          setTierModal({
+                            tier: t.tier,
+                            label: t.label,
+                            terms: t.terms || '',
+                            mult: t.base_multiplier.toFixed(2),
+                          })
                         }
                         style={{
                           fontFamily: "'Archivo', sans-serif",
@@ -1323,6 +1374,272 @@ export default function AdminPage() {
                 }}
               >
                 {inviting ? 'Sending…' : 'Send invite'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ADD SKU MODAL — writes to skus table */}
+      {skuModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(34,42,48,0.40)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 60,
+          }}
+          onClick={() => setSkuModal(false)}
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: '10px',
+              padding: '26px',
+              width: '460px',
+              maxWidth: '94vw',
+              boxShadow: '0 16px 48px rgba(34,42,48,0.22)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                fontSize: '16px',
+                fontWeight: 700,
+                letterSpacing: '-0.01em',
+                marginBottom: '18px',
+              }}
+            >
+              Add SKU to Master Index
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div>
+                <label style={labelStyle}>CODE *</label>
+                <input
+                  style={{
+                    ...inputStyle,
+                    fontFamily: "'IBM Plex Mono', monospace",
+                    textTransform: 'uppercase',
+                  }}
+                  placeholder="AHI-A+"
+                  value={skuForm.code}
+                  onChange={(e) => setSkuForm((f) => ({ ...f, code: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>SPECIES *</label>
+                <input
+                  style={inputStyle}
+                  placeholder="Ahi Tuna"
+                  value={skuForm.species}
+                  onChange={(e) => setSkuForm((f) => ({ ...f, species: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>GRADE</label>
+                <input
+                  style={inputStyle}
+                  placeholder="A+"
+                  value={skuForm.grade}
+                  onChange={(e) => setSkuForm((f) => ({ ...f, grade: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>PACK TYPE</label>
+                <input
+                  style={inputStyle}
+                  placeholder="Box"
+                  value={skuForm.pack_type}
+                  onChange={(e) => setSkuForm((f) => ({ ...f, pack_type: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>UOM</label>
+                <select
+                  style={inputStyle}
+                  value={skuForm.uom}
+                  onChange={(e) => setSkuForm((f) => ({ ...f, uom: e.target.value }))}
+                >
+                  <option value="lb">lb</option>
+                  <option value="kg">kg</option>
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle}>QBO ITEM NAME</label>
+                <input
+                  style={inputStyle}
+                  placeholder="Ahi Tuna – Grade A+"
+                  value={skuForm.qbo_item}
+                  onChange={(e) => setSkuForm((f) => ({ ...f, qbo_item: e.target.value }))}
+                />
+              </div>
+            </div>
+            {skuError && (
+              <div
+                style={{
+                  marginTop: '14px',
+                  background: '#FBF0EF',
+                  border: '1px solid #E3B6B1',
+                  borderRadius: '5px',
+                  padding: '10px 13px',
+                  fontSize: '12px',
+                  color: '#A5362C',
+                }}
+              >
+                {skuError}
+              </div>
+            )}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: '10px',
+                marginTop: '22px',
+              }}
+            >
+              <button
+                onClick={() => setSkuModal(false)}
+                style={{
+                  fontFamily: "'Archivo', sans-serif",
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  background: '#fff',
+                  color: '#5A6670',
+                  border: '1px solid #D6DCE0',
+                  borderRadius: '5px',
+                  padding: '10px 16px',
+                  cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveSku}
+                disabled={savingSku || !skuForm.code || !skuForm.species}
+                style={{
+                  fontFamily: "'Archivo', sans-serif",
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  background:
+                    savingSku || !skuForm.code || !skuForm.species ? '#8A99A3' : '#222A30',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '5px',
+                  padding: '10px 18px',
+                  cursor:
+                    savingSku || !skuForm.code || !skuForm.species ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {savingSku ? 'Saving…' : 'Add SKU'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT TIER MODAL — writes to pricing_tiers table */}
+      {tierModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(34,42,48,0.40)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 60,
+          }}
+          onClick={() => setTierModal(null)}
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: '10px',
+              padding: '26px',
+              width: '400px',
+              maxWidth: '94vw',
+              boxShadow: '0 16px 48px rgba(34,42,48,0.22)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                fontSize: '16px',
+                fontWeight: 700,
+                letterSpacing: '-0.01em',
+                marginBottom: '4px',
+              }}
+            >
+              Edit {tierModal.label}
+            </div>
+            <div style={{ fontSize: '12px', color: '#8A99A3', marginBottom: '18px' }}>
+              Changes apply to every customer on {tierModal.tier} at the next order.
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div>
+                <label style={labelStyle}>PAYMENT TERMS</label>
+                <input
+                  style={inputStyle}
+                  placeholder="Net 15"
+                  value={tierModal.terms}
+                  onChange={(e) => setTierModal((m) => (m ? { ...m, terms: e.target.value } : m))}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>PRICE MULTIPLIER</label>
+                <input
+                  style={{ ...inputStyle, fontFamily: "'IBM Plex Mono', monospace" }}
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={tierModal.mult}
+                  onChange={(e) => setTierModal((m) => (m ? { ...m, mult: e.target.value } : m))}
+                />
+              </div>
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: '10px',
+                marginTop: '22px',
+              }}
+            >
+              <button
+                onClick={() => setTierModal(null)}
+                style={{
+                  fontFamily: "'Archivo', sans-serif",
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  background: '#fff',
+                  color: '#5A6670',
+                  border: '1px solid #D6DCE0',
+                  borderRadius: '5px',
+                  padding: '10px 16px',
+                  cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveTier}
+                disabled={savingTier}
+                style={{
+                  fontFamily: "'Archivo', sans-serif",
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  background: savingTier ? '#8A99A3' : '#222A30',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '5px',
+                  padding: '10px 18px',
+                  cursor: savingTier ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {savingTier ? 'Saving…' : 'Save tier'}
               </button>
             </div>
           </div>

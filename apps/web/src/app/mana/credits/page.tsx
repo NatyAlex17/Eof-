@@ -18,6 +18,7 @@ interface Claim {
   qboRef?: string;
   resolvedNote?: string;
   salesRep: string;
+  counterAmount?: number;
 }
 
 interface Downgrade {
@@ -146,6 +147,7 @@ export default function CreditsPage() {
   const [tab, setTab] = useState<'claims' | 'downgrades'>('claims');
   const [claims, setClaims] = useState<Claim[]>(SEED_CLAIMS);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [counterModal, setCounterModal] = useState<{ claim: Claim; amount: string } | null>(null);
   const [form, setForm] = useState({
     customer: '',
     order: '',
@@ -179,18 +181,23 @@ export default function CreditsPage() {
     );
   };
 
-  const counterClaim = (id: string) => {
+  const confirmCounter = () => {
+    if (!counterModal) return;
+    const amt = Math.abs(parseFloat(counterModal.amount) || 0);
+    if (amt <= 0) return;
     setClaims((prev) =>
       prev.map((c) =>
-        c.id === id
+        c.id === counterModal.claim.id
           ? {
               ...c,
               status: 'countered',
-              resolvedNote: 'Counter offer sent · awaiting customer response.',
+              counterAmount: -amt,
+              resolvedNote: `Counter offer sent: partial credit $${amt.toFixed(2)} (claimed ${money(counterModal.claim.amount)}) · awaiting customer response.`,
             }
           : c
       )
     );
+    setCounterModal(null);
   };
 
   const rejectClaim = (id: string) => {
@@ -696,7 +703,12 @@ export default function CreditsPage() {
                               Reject
                             </button>
                             <button
-                              onClick={() => counterClaim(c.id)}
+                              onClick={() =>
+                                setCounterModal({
+                                  claim: c,
+                                  amount: (Math.abs(c.amount) / 2).toFixed(2),
+                                })
+                              }
                               style={{
                                 fontFamily: "'Archivo', sans-serif",
                                 fontSize: '12px',
@@ -898,6 +910,146 @@ export default function CreditsPage() {
           )}
         </div>
       </div>
+
+      {/* COUNTER OFFER MODAL */}
+      {counterModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(34,42,48,0.40)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 60,
+          }}
+          onClick={() => setCounterModal(null)}
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: '10px',
+              padding: '26px',
+              width: '420px',
+              maxWidth: '94vw',
+              boxShadow: '0 16px 48px rgba(34,42,48,0.22)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontSize: '16px', fontWeight: 700, letterSpacing: '-0.01em' }}>
+              Counter offer — {counterModal.claim.id}
+            </div>
+            <div style={{ fontSize: '13px', color: '#5A6670', margin: '6px 0 18px' }}>
+              {counterModal.claim.customer} claimed{' '}
+              <span
+                style={{
+                  fontFamily: "'IBM Plex Mono', monospace",
+                  fontWeight: 600,
+                  color: '#A5362C',
+                }}
+              >
+                {money(counterModal.claim.amount)}
+              </span>
+              . Enter the partial credit you&apos;re offering instead.
+            </div>
+            <label style={labelStyle}>COUNTER AMOUNT ($) *</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                autoFocus
+                value={counterModal.amount}
+                onChange={(e) => setCounterModal((m) => (m ? { ...m, amount: e.target.value } : m))}
+                style={{
+                  ...inputStyle,
+                  fontFamily: "'IBM Plex Mono', monospace",
+                  fontSize: '16px',
+                  fontWeight: 600,
+                }}
+              />
+              <button
+                onClick={() =>
+                  setCounterModal((m) =>
+                    m ? { ...m, amount: (Math.abs(m.claim.amount) / 2).toFixed(2) } : m
+                  )
+                }
+                style={{
+                  flex: 'none',
+                  fontFamily: "'Archivo', sans-serif",
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  color: '#3F6F86',
+                  background: '#EEF3F6',
+                  border: '1px solid #C5D8E2',
+                  borderRadius: '5px',
+                  padding: '9px 12px',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                50%
+              </button>
+            </div>
+            <div
+              style={{
+                background: '#F4EEE2',
+                border: '1px solid #E8D5B0',
+                borderRadius: '5px',
+                padding: '10px 13px',
+                fontSize: '12px',
+                color: '#8A5A14',
+                marginTop: '14px',
+              }}
+            >
+              The counter is sent to the customer for acceptance. No QBO credit memo is issued until
+              they accept.
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: '10px',
+                marginTop: '20px',
+              }}
+            >
+              <button
+                onClick={() => setCounterModal(null)}
+                style={{
+                  fontFamily: "'Archivo', sans-serif",
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  background: '#fff',
+                  color: '#5A6670',
+                  border: '1px solid #D6DCE0',
+                  borderRadius: '5px',
+                  padding: '10px 16px',
+                  cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmCounter}
+                disabled={!(parseFloat(counterModal.amount) > 0)}
+                style={{
+                  fontFamily: "'Archivo', sans-serif",
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  background: parseFloat(counterModal.amount) > 0 ? '#222A30' : '#E2E6E9',
+                  color: parseFloat(counterModal.amount) > 0 ? '#fff' : '#A6AEB4',
+                  border: 'none',
+                  borderRadius: '5px',
+                  padding: '10px 18px',
+                  cursor: parseFloat(counterModal.amount) > 0 ? 'pointer' : 'default',
+                }}
+              >
+                Send counter
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* NEW CLAIM DRAWER */}
       {drawerOpen && (
