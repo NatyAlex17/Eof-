@@ -3,18 +3,22 @@
 import { useState } from 'react';
 import Nav from '../components/Nav';
 
+interface Content {
+  species: string;
+  grade: string;
+  weight: number;
+}
+
 interface Box {
   n: string;
   idx: number;
-  weight: number;
+  contents: Content[];
   tag?: string;
 }
 
 interface Lot {
   lot: string;
-  species: string;
   vendor: string;
-  grade: string;
   received: string;
   status: 'received' | 'available' | 'allocated' | 'shipped';
   boxes: Box[];
@@ -31,60 +35,105 @@ export default function InventoryPage() {
   const lotData: Lot[] = [
     {
       lot: 'LOT-2207',
-      species: 'Ahi Tuna',
       vendor: 'Kona Fresh Catch',
-      grade: 'A+',
       received: 'Jun 23 · 05:40',
       status: 'available',
       boxes: [
-        { n: 'B-4471', idx: 1, weight: 42.6, tag: 'NOBU' },
-        { n: 'B-4472', idx: 2, weight: 38.1, tag: 'NOBU' },
-        { n: 'B-4473', idx: 3, weight: 40.2 },
-        { n: 'B-4474', idx: 4, weight: 44.0 },
-        { n: 'B-4475', idx: 5, weight: 39.5 },
-        { n: 'B-4476', idx: 6, weight: 41.8 },
+        {
+          n: 'B-4471',
+          idx: 1,
+          tag: 'NOBU',
+          contents: [{ species: 'Ahi Tuna', grade: 'A+', weight: 42.6 }],
+        },
+        // Vendor packed two species in one box
+        {
+          n: 'B-4472',
+          idx: 2,
+          tag: 'NOBU',
+          contents: [
+            { species: 'Ahi Tuna', grade: 'A+', weight: 38.1 },
+            { species: 'Ono', grade: 'A', weight: 6.0 },
+          ],
+        },
+        { n: 'B-4473', idx: 3, contents: [{ species: 'Ahi Tuna', grade: 'A+', weight: 40.2 }] },
+        {
+          n: 'B-4474',
+          idx: 4,
+          contents: [
+            { species: 'Ono', grade: 'A', weight: 30.0 },
+            { species: 'Ahi Tuna', grade: 'A', weight: 10.0 },
+          ],
+        },
+        { n: 'B-4475', idx: 5, contents: [{ species: 'Ahi Tuna', grade: 'A+', weight: 39.5 }] },
+        { n: 'B-4476', idx: 6, contents: [{ species: 'Ahi Tuna', grade: 'A+', weight: 41.8 }] },
       ],
     },
     {
       lot: 'LOT-2208',
-      species: 'Salmon',
       vendor: 'Pacific Blue Co.',
-      grade: 'A',
       received: 'Jun 23 · 05:52',
       status: 'available',
       boxes: [
-        { n: 'B-4520', idx: 1, weight: 31.2, tag: 'MORI' },
-        { n: 'B-4521', idx: 2, weight: 33.5 },
-        { n: 'B-4522', idx: 3, weight: 29.8 },
-        { n: 'B-4523', idx: 4, weight: 34.1 },
-        { n: 'B-4524', idx: 5, weight: 30.6 },
+        {
+          n: 'B-4520',
+          idx: 1,
+          tag: 'MORI',
+          contents: [{ species: 'Salmon', grade: 'A', weight: 31.2 }],
+        },
+        {
+          n: 'B-4521',
+          idx: 2,
+          contents: [
+            { species: 'Salmon', grade: 'A', weight: 33.5 },
+            { species: 'Hamachi', grade: 'A+', weight: 4.0 },
+          ],
+        },
+        { n: 'B-4522', idx: 3, contents: [{ species: 'Salmon', grade: 'A', weight: 29.8 }] },
+        { n: 'B-4523', idx: 4, contents: [{ species: 'Salmon', grade: 'A', weight: 34.1 }] },
       ],
     },
     {
       lot: 'LOT-2209',
-      species: 'Ono',
       vendor: 'Island Seafood',
-      grade: 'A',
       received: 'Jun 23 · 06:05',
       status: 'received',
       boxes: [
-        { n: 'B-4560', idx: 1, weight: 29.8 },
-        { n: 'B-4561', idx: 2, weight: 33.5 },
-        { n: 'B-4562', idx: 3, weight: 26.4 },
-        { n: 'B-4563', idx: 4, weight: 28.9 },
+        { n: 'B-4560', idx: 1, contents: [{ species: 'Ono', grade: 'A', weight: 29.8 }] },
+        {
+          n: 'B-4561',
+          idx: 2,
+          contents: [
+            { species: 'Ono', grade: 'A', weight: 20.0 },
+            { species: 'Mahi-Mahi', grade: 'A', weight: 13.5 },
+          ],
+        },
+        { n: 'B-4562', idx: 3, contents: [{ species: 'Ono', grade: 'A', weight: 26.4 }] },
       ],
     },
     {
       lot: 'LOT-2205',
-      species: 'Hamachi',
       vendor: 'Kona Fresh Catch',
-      grade: 'A+',
       received: 'Jun 22 · 06:10',
       status: 'shipped',
       boxes: [
-        { n: 'B-4410', idx: 1, weight: 22.4, tag: 'ROY' },
-        { n: 'B-4411', idx: 2, weight: 24.1, tag: 'ROY' },
-        { n: 'B-4412', idx: 3, weight: 23.8, tag: 'WONG' },
+        {
+          n: 'B-4410',
+          idx: 1,
+          tag: 'ROY',
+          contents: [{ species: 'Hamachi', grade: 'A+', weight: 22.4 }],
+        },
+        {
+          n: 'B-4411',
+          idx: 2,
+          tag: 'ROY',
+          contents: [{ species: 'Hamachi', grade: 'A+', weight: 24.1 }],
+        },
+        {
+          n: 'B-4412',
+          idx: 3,
+          tag: 'WONG',
+          contents: [{ species: 'Hamachi', grade: 'A+', weight: 23.8 }],
+        },
       ],
     },
   ];
@@ -96,11 +145,13 @@ export default function InventoryPage() {
     shipped: { label: 'Shipped', color: '#5A6670', bg: '#EEF0F2', dot: '#8A99A3' },
   };
 
+  const boxWeight = (b: Box) => b.contents.reduce((a, c) => a + c.weight, 0);
+  const lotSpecies = (lot: Lot) =>
+    Array.from(new Set(lot.boxes.flatMap((b) => b.contents.map((c) => c.species))));
+
   const filteredLots = filter === 'all' ? lotData : lotData.filter((l) => l.status === filter);
 
-  const toggleExpanded = (lot: string) => {
-    setExpanded((prev) => ({ ...prev, [lot]: !prev[lot] }));
-  };
+  const toggleExpanded = (lot: string) => setExpanded((prev) => ({ ...prev, [lot]: !prev[lot] }));
 
   return (
     <div
@@ -214,13 +265,7 @@ export default function InventoryPage() {
         </header>
 
         {/* TABLE */}
-        <div
-          style={{
-            flex: 1,
-            overflowY: 'auto',
-            padding: '22px 28px',
-          }}
-        >
+        <div style={{ flex: 1, overflowY: 'auto', padding: '22px 28px' }}>
           <div
             style={{
               background: '#fff',
@@ -233,7 +278,7 @@ export default function InventoryPage() {
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: '30px 128px 1fr 70px 90px 96px 110px 132px',
+                gridTemplateColumns: '30px 128px 1fr 90px 96px 110px 132px',
                 gap: 0,
                 alignItems: 'center',
                 padding: '11px 18px',
@@ -248,7 +293,6 @@ export default function InventoryPage() {
               <span></span>
               <span>LOT</span>
               <span>SPECIES · VENDOR</span>
-              <span>GRADE</span>
               <span style={{ textAlign: 'right' }}>BOXES</span>
               <span style={{ textAlign: 'right' }}>WEIGHT</span>
               <span>RECEIVED</span>
@@ -259,7 +303,8 @@ export default function InventoryPage() {
             {filteredLots.map((lot) => {
               const isExpanded = !!expanded[lot.lot];
               const meta = statusMeta[lot.status];
-              const totalWeight = lot.boxes.reduce((a, b) => a + b.weight, 0);
+              const totalWeight = lot.boxes.reduce((a, b) => a + boxWeight(b), 0);
+              const species = lotSpecies(lot);
 
               return (
                 <div key={lot.lot} style={{ borderBottom: '1px solid #EDEFF1' }}>
@@ -268,7 +313,7 @@ export default function InventoryPage() {
                     onClick={() => toggleExpanded(lot.lot)}
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: '30px 128px 1fr 70px 90px 96px 110px 132px',
+                      gridTemplateColumns: '30px 128px 1fr 90px 96px 110px 132px',
                       gap: 0,
                       alignItems: 'center',
                       padding: '13px 18px',
@@ -304,12 +349,29 @@ export default function InventoryPage() {
                     >
                       {lot.lot}
                     </span>
-                    <span style={{ minWidth: 0 }}>
-                      <span style={{ fontSize: '14px', fontWeight: 600 }}>{lot.species}</span>
+                    <span
+                      style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: '8px' }}
+                    >
+                      <span style={{ fontSize: '14px', fontWeight: 600 }}>
+                        {species.length > 1 ? `Mixed · ${species.length} species` : species[0]}
+                      </span>
+                      {species.length > 1 && (
+                        <span
+                          style={{
+                            fontSize: '9px',
+                            fontWeight: 700,
+                            letterSpacing: '0.04em',
+                            color: '#8A5A14',
+                            background: '#F4EEE2',
+                            border: '1px solid #E4D2A8',
+                            borderRadius: '2px',
+                            padding: '1px 6px',
+                          }}
+                        >
+                          MIXED
+                        </span>
+                      )}
                       <span style={{ fontSize: '12px', color: '#8A99A3' }}> · {lot.vendor}</span>
-                    </span>
-                    <span style={{ fontSize: '12px', fontWeight: 600, color: '#5A6670' }}>
-                      {lot.grade}
                     </span>
                     <span
                       style={{
@@ -372,80 +434,177 @@ export default function InventoryPage() {
                       <div
                         style={{
                           display: 'grid',
-                          gridTemplateColumns: 'repeat(auto-fill, minmax(168px, 1fr))',
+                          gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))',
                           gap: '8px',
                         }}
                       >
-                        {lot.boxes.map((box) => (
-                          <div
-                            key={box.n}
-                            style={{
-                              background: '#fff',
-                              border: '1px solid #E2E6E9',
-                              borderLeft: `3px solid ${statusMeta[lot.status].dot}`,
-                              borderRadius: '4px',
-                              padding: '9px 11px',
-                            }}
-                          >
+                        {lot.boxes.map((box) => {
+                          const mixed = new Set(box.contents.map((c) => c.species)).size > 1;
+                          return (
                             <div
+                              key={box.n}
                               style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
+                                background: '#fff',
+                                border: '1px solid #E2E6E9',
+                                borderLeft: `3px solid ${meta.dot}`,
+                                borderRadius: '4px',
+                                padding: '9px 11px',
                               }}
                             >
-                              <span
+                              <div
                                 style={{
-                                  fontFamily: "'IBM Plex Mono', monospace",
-                                  fontSize: '12px',
-                                  fontWeight: 600,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  gap: '6px',
                                 }}
                               >
-                                {box.n}
-                              </span>
-                              {box.tag && (
-                                <span
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <span
+                                    style={{
+                                      fontFamily: "'IBM Plex Mono', monospace",
+                                      fontSize: '12px',
+                                      fontWeight: 600,
+                                    }}
+                                  >
+                                    {box.n}
+                                  </span>
+                                  {mixed && (
+                                    <span
+                                      style={{
+                                        fontSize: '8px',
+                                        fontWeight: 700,
+                                        letterSpacing: '0.04em',
+                                        color: '#8A5A14',
+                                        background: '#F4EEE2',
+                                        border: '1px solid #E4D2A8',
+                                        borderRadius: '2px',
+                                        padding: '1px 5px',
+                                      }}
+                                    >
+                                      MIXED
+                                    </span>
+                                  )}
+                                </div>
+                                {box.tag && (
+                                  <span
+                                    style={{
+                                      fontSize: '9px',
+                                      fontWeight: 700,
+                                      letterSpacing: '0.04em',
+                                      color: '#fff',
+                                      background: '#3F6F86',
+                                      borderRadius: '2px',
+                                      padding: '2px 6px',
+                                    }}
+                                  >
+                                    {box.tag}
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* species breakdown within the box */}
+                              <div
+                                style={{
+                                  marginTop: '8px',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: '5px',
+                                }}
+                              >
+                                {box.contents.map((c, i) => (
+                                  <div
+                                    key={i}
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      gap: '8px',
+                                    }}
+                                  >
+                                    <span
+                                      style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '5px',
+                                        minWidth: 0,
+                                      }}
+                                    >
+                                      <span
+                                        style={{
+                                          fontSize: '12px',
+                                          fontWeight: 500,
+                                          whiteSpace: 'nowrap',
+                                          overflow: 'hidden',
+                                          textOverflow: 'ellipsis',
+                                        }}
+                                      >
+                                        {c.species}
+                                      </span>
+                                      <span
+                                        style={{
+                                          fontSize: '9px',
+                                          fontWeight: 700,
+                                          color: '#5A6670',
+                                          border: '1px solid #D6DCE0',
+                                          borderRadius: '2px',
+                                          padding: '0 4px',
+                                        }}
+                                      >
+                                        {c.grade}
+                                      </span>
+                                    </span>
+                                    <span
+                                      style={{
+                                        fontFamily: "'IBM Plex Mono', monospace",
+                                        fontSize: '13px',
+                                        fontWeight: 600,
+                                        flex: 'none',
+                                      }}
+                                    >
+                                      {c.weight}
+                                      <span
+                                        style={{
+                                          fontSize: '9px',
+                                          color: '#8A99A3',
+                                          fontWeight: 500,
+                                        }}
+                                      >
+                                        {' '}
+                                        lb
+                                      </span>
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+
+                              {mixed && (
+                                <div
                                   style={{
-                                    fontSize: '9px',
-                                    fontWeight: 700,
-                                    letterSpacing: '0.04em',
-                                    color: '#fff',
-                                    background: '#3F6F86',
-                                    borderRadius: '2px',
-                                    padding: '2px 6px',
+                                    marginTop: '8px',
+                                    paddingTop: '7px',
+                                    borderTop: '1px solid #EDEFF1',
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    fontSize: '10px',
+                                    color: '#8A99A3',
                                   }}
                                 >
-                                  {box.tag}
-                                </span>
+                                  <span>#{box.idx} · box total</span>
+                                  <span
+                                    style={{
+                                      fontFamily: "'IBM Plex Mono', monospace",
+                                      fontWeight: 600,
+                                      color: '#5A6670',
+                                    }}
+                                  >
+                                    {boxWeight(box).toFixed(1)} lb
+                                  </span>
+                                </div>
                               )}
                             </div>
-                            <div
-                              style={{
-                                display: 'flex',
-                                alignItems: 'baseline',
-                                justifyContent: 'space-between',
-                                marginTop: '7px',
-                              }}
-                            >
-                              <span style={{ fontSize: '10px', color: '#8A99A3' }}>#{box.idx}</span>
-                              <span
-                                style={{
-                                  fontFamily: "'IBM Plex Mono', monospace",
-                                  fontSize: '15px',
-                                  fontWeight: 600,
-                                }}
-                              >
-                                {box.weight}
-                                <span
-                                  style={{ fontSize: '10px', color: '#8A99A3', fontWeight: 500 }}
-                                >
-                                  {' '}
-                                  lb
-                                </span>
-                              </span>
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -481,21 +640,15 @@ export default function InventoryPage() {
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            {/* DRAWER HEAD */}
             <div
               style={{
-                flexBasis: 'auto',
                 padding: '20px 24px',
                 background: '#fff',
                 borderBottom: '1px solid #E2E6E9',
               }}
             >
               <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                }}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
               >
                 <div>
                   <div style={{ fontSize: '16px', fontWeight: 700, letterSpacing: '-0.01em' }}>
@@ -509,7 +662,7 @@ export default function InventoryPage() {
                       marginTop: '3px',
                     }}
                   >
-                    kona_fresh_packlist_0623.csv · 24 rows
+                    kona_fresh_packlist_0623.csv · 24 rows · multi-species boxes detected
                   </div>
                 </div>
                 <button
@@ -528,23 +681,15 @@ export default function InventoryPage() {
               </div>
             </div>
 
-            {/* ROWS */}
-            <div
-              style={{
-                flex: 1,
-                overflowY: 'auto',
-                padding: '18px 24px',
-              }}
-            >
+            <div style={{ flex: 1, overflowY: 'auto', padding: '18px 24px' }}>
               <p style={{ textAlign: 'center', color: '#8A99A3', fontSize: '14px' }}>
-                Import preview - 24 rows ready to import
+                Import preview — 24 rows ready. Rows sharing a box number are grouped into one
+                multi-species box.
               </p>
             </div>
 
-            {/* FOOTER */}
             <div
               style={{
-                flexBasis: 'auto',
                 padding: '16px 24px',
                 background: '#fff',
                 borderTop: '1px solid #E2E6E9',

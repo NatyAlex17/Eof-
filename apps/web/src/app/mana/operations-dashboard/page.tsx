@@ -1,6 +1,7 @@
 'use client';
 
 import Nav from '../components/Nav';
+import DateRangeFilter from '../components/DateRangeFilter';
 
 interface Kpi {
   label: string;
@@ -142,6 +143,7 @@ export default function OperationsDashboardPage() {
               Live · all locations
             </span>
           </div>
+          <DateRangeFilter defaultKey="today" />
         </header>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '22px 28px' }}>

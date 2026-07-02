@@ -1,44 +1,13 @@
 'use client';
 
-import { useState } from 'react';
 import Nav from '../components/Nav';
-
-type Period = 'today' | 'week' | 'month';
+import DateRangeFilter from '../components/DateRangeFilter';
 
 export default function CEODashboardPage() {
-  const [period, setPeriod] = useState<Period>('today');
-
   const bar = (pct: number, color: string) => ({
     width: `${pct}%`,
     height: '100%',
     background: color,
-  });
-
-  const periods: Array<{
-    label: string;
-    onClick: () => void;
-    style: React.CSSProperties;
-  }> = [
-    ['today', 'Today'],
-    ['week', 'Week'],
-    ['month', 'Month'],
-  ].map(([k, label]) => {
-    const on = period === k;
-    return {
-      label: label as string,
-      onClick: () => setPeriod(k as Period),
-      style: {
-        fontFamily: "'Archivo',sans-serif",
-        fontSize: '12px',
-        fontWeight: 600,
-        border: 'none',
-        borderRadius: '4px',
-        padding: '6px 14px',
-        cursor: 'pointer',
-        background: on ? '#3F6F86' : 'none',
-        color: on ? '#fff' : '#5A6670',
-      },
-    };
   });
 
   const warehouses = [
@@ -219,27 +188,9 @@ export default function CEODashboardPage() {
             >
               Good morning, Blake
             </span>
-            <span style={{ fontSize: '12px', color: '#8A99A3' }}>
-              Monday · June 23 · 06:14
-            </span>
+            <span style={{ fontSize: '12px', color: '#8A99A3' }}>Monday · June 23 · 06:14</span>
           </div>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '2px',
-              background: '#F4F5F6',
-              border: '1px solid #E2E6E9',
-              borderRadius: '5px',
-              padding: '3px',
-            }}
-          >
-            {periods.map((p, i) => (
-              <button key={i} onClick={p.onClick} style={p.style}>
-                {p.label}
-              </button>
-            ))}
-          </div>
+          <DateRangeFilter defaultKey="today" />
         </header>
 
         <div
@@ -554,9 +505,7 @@ export default function CEODashboardPage() {
                       marginBottom: '6px',
                     }}
                   >
-                    <span style={{ fontSize: '14px', fontWeight: 700 }}>
-                      Margin trend
-                    </span>
+                    <span style={{ fontSize: '14px', fontWeight: 700 }}>Margin trend</span>
                     <span style={{ fontSize: '12px', color: '#8A99A3' }}>
                       Last 7 days · gross %
                     </span>
@@ -577,9 +526,7 @@ export default function CEODashboardPage() {
                       }}
                     >
                       23.4
-                      <span style={{ fontSize: '16px', color: '#8A99A3' }}>
-                        %
-                      </span>
+                      <span style={{ fontSize: '16px', color: '#8A99A3' }}>%</span>
                     </div>
                     <div style={{ flex: 1 }}>
                       <svg
@@ -627,12 +574,8 @@ export default function CEODashboardPage() {
                     marginBottom: '18px',
                   }}
                 >
-                  <span style={{ fontSize: '14px', fontWeight: 700 }}>
-                    Top customers
-                  </span>
-                  <span style={{ fontSize: '12px', color: '#8A99A3' }}>
-                    This week
-                  </span>
+                  <span style={{ fontSize: '14px', fontWeight: 700 }}>Top customers</span>
+                  <span style={{ fontSize: '12px', color: '#8A99A3' }}>This week</span>
                 </div>
                 <div
                   style={{
@@ -651,9 +594,7 @@ export default function CEODashboardPage() {
                           marginBottom: '6px',
                         }}
                       >
-                        <span style={{ fontSize: '13px', fontWeight: 600 }}>
-                          {c.name}
-                        </span>
+                        <span style={{ fontSize: '13px', fontWeight: 600 }}>{c.name}</span>
                         <span
                           style={{
                             fontFamily: "'IBM Plex Mono', monospace",
@@ -698,9 +639,7 @@ export default function CEODashboardPage() {
                   marginBottom: '6px',
                 }}
               >
-                <span style={{ fontSize: '14px', fontWeight: 700 }}>
-                  Buying intelligence
-                </span>
+                <span style={{ fontSize: '14px', fontWeight: 700 }}>Buying intelligence</span>
                 <span style={{ fontSize: '12px', color: '#8A99A3' }}>
                   Historical demand by species · what to order next
                 </span>
@@ -737,9 +676,7 @@ export default function CEODashboardPage() {
                     borderBottom: '1px solid #EDEFF1',
                   }}
                 >
-                  <span style={{ fontSize: '14px', fontWeight: 600 }}>
-                    {d.name}
-                  </span>
+                  <span style={{ fontSize: '14px', fontWeight: 600 }}>{d.name}</span>
                   <div
                     style={{
                       paddingRight: '24px',

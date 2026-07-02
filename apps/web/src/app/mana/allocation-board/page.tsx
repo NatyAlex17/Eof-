@@ -7,40 +7,43 @@ import ConfirmLockModal from '../components/ConfirmLockModal';
 import LockedBoardBanner from '../components/LockedBoardBanner';
 import SplitBoxModal from '../components/SplitBoxModal';
 
+interface OrderLine {
+  species: string;
+  target: number;
+}
+
 interface Order {
   id: string;
   customer: string;
   code: string;
   tier: string;
   carrier: string;
-  species: string;
-  target: number;
-  allocated: number;
   color: string;
+  lines: OrderLine[];
+}
+
+// A box can hold multiple species — each portion is its own assignable content line.
+interface Content {
+  id: string;
+  species: string;
+  grade: string;
+  weight: number;
+  assignedTo: string | null;
+  splitGroup?: string;
+  part?: 'A' | 'B';
 }
 
 interface Box {
   id: string;
   n: string;
   idx: number;
-  weight: number;
-  species: string;
-  assignedTo: string | null;
-  split: null | { a: number; b: number };
-  locked: boolean;
-  lockInitial?: string;
-  // Split-box tracking: pieces of a split share a splitGroup and remember their origin
-  splitGroup?: string;
-  parentN?: string;
-  part?: 'A' | 'B';
+  contents: Content[];
 }
 
 interface Lot {
   id: string;
   lot: string;
   vendor: string;
-  species: string;
-  grade: string;
   boxes: Box[];
 }
 
@@ -53,32 +56,37 @@ const colors = {
   violet: '#7B6A91',
 };
 
+const round1 = (n: number) => Math.round(n * 10) / 10;
+
 export default function AllocationBoardPage() {
   const router = useRouter();
   const [location, setLocation] = useState<'SFO' | 'LAX'>('SFO');
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>('o1');
-  const [splitModal, setSplitModal] = useState<{ lotId: string; box: Box } | null>(null);
+  const [splitTarget, setSplitTarget] = useState<{
+    lotId: string;
+    boxId: string;
+    content: Content;
+  } | null>(null);
   const [splitSeq, setSplitSeq] = useState(0);
   const [isLocked, setIsLocked] = useState(false);
   const [lockModalOpen, setLockModalOpen] = useState(false);
   const [isLocking, setIsLocking] = useState(false);
   const [lockedAt, setLockedAt] = useState<string>('');
   const [lockedBy, setLockedBy] = useState<string>('');
-  const [draggedBox, setDraggedBox] = useState<{ lotId: string; boxId: string } | null>(null);
-  const [dragOverOrderId, setDragOverOrderId] = useState<string | null>(null);
 
-  // Sample data
-  const ordersBase: Order[] = [
+  // Orders now carry multiple species lines, each with its own target.
+  const orders: Order[] = [
     {
       id: 'o1',
       customer: 'Nobu',
       code: 'NOBU',
       tier: 'Tier 1',
       carrier: 'Air Cargo',
-      species: 'Ahi Tuna',
-      target: 90,
-      allocated: 80,
       color: colors.steel,
+      lines: [
+        { species: 'Ahi Tuna', target: 90 },
+        { species: 'Ono', target: 30 },
+      ],
     },
     {
       id: 'o2',
@@ -86,10 +94,8 @@ export default function AllocationBoardPage() {
       code: 'MORI',
       tier: 'Tier 1',
       carrier: 'Air Cargo',
-      species: 'Salmon',
-      target: 60,
-      allocated: 31,
       color: colors.sage,
+      lines: [{ species: 'Salmon', target: 60 }],
     },
     {
       id: 'o3',
@@ -97,10 +103,11 @@ export default function AllocationBoardPage() {
       code: 'ROY',
       tier: 'Tier 2',
       carrier: 'Ground',
-      species: 'Ono',
-      target: 75,
-      allocated: 0,
       color: colors.amber,
+      lines: [
+        { species: 'Ono', target: 75 },
+        { species: 'Ahi Tuna', target: 20 },
+      ],
     },
     {
       id: 'o4',
@@ -108,80 +115,59 @@ export default function AllocationBoardPage() {
       code: 'WONG',
       tier: 'Tier 2',
       carrier: 'Ground',
-      species: 'Ahi Tuna',
-      target: 45,
-      allocated: 0,
       color: colors.slate,
+      lines: [{ species: 'Ahi Tuna', target: 45 }],
     },
   ];
 
+  // Lots contain boxes; boxes contain mixed-species contents.
   const [lots, setLots] = useState<Lot[]>([
     {
       id: 'lot1',
       lot: 'LOT-2207',
       vendor: 'Kona Fresh Catch',
-      species: 'Ahi Tuna',
-      grade: 'A+',
       boxes: [
         {
           id: 'b1',
           n: 'B-4471',
           idx: 1,
-          weight: 42.6,
-          species: 'Ahi Tuna',
-          assignedTo: 'o1',
-          split: null,
-          locked: false,
+          contents: [
+            { id: 'b1c1', species: 'Ahi Tuna', grade: 'A+', weight: 42.6, assignedTo: 'o1' },
+          ],
         },
         {
           id: 'b2',
           n: 'B-4472',
           idx: 2,
-          weight: 38.1,
-          species: 'Ahi Tuna',
-          assignedTo: 'o1',
-          split: null,
-          locked: false,
+          contents: [
+            { id: 'b2c1', species: 'Ahi Tuna', grade: 'A+', weight: 38.1, assignedTo: 'o1' },
+            { id: 'b2c2', species: 'Ono', grade: 'A', weight: 6.0, assignedTo: null },
+          ],
         },
         {
           id: 'b3',
           n: 'B-4473',
           idx: 3,
-          weight: 40.2,
-          species: 'Ahi Tuna',
-          assignedTo: null,
-          split: null,
-          locked: false,
+          contents: [
+            { id: 'b3c1', species: 'Ahi Tuna', grade: 'A+', weight: 40.2, assignedTo: null },
+          ],
         },
         {
           id: 'b4',
           n: 'B-4474',
           idx: 4,
-          weight: 44.0,
-          species: 'Ahi Tuna',
-          assignedTo: null,
-          split: null,
-          locked: false,
+          contents: [
+            { id: 'b4c1', species: 'Ono', grade: 'A', weight: 30.0, assignedTo: null },
+            { id: 'b4c2', species: 'Ahi Tuna', grade: 'A', weight: 10.0, assignedTo: null },
+          ],
         },
         {
           id: 'b5',
           n: 'B-4475',
           idx: 5,
-          weight: 39.5,
-          species: 'Ahi Tuna',
-          assignedTo: null,
-          split: null,
-          locked: false,
-        },
-        {
-          id: 'b6',
-          n: 'B-4476',
-          idx: 6,
-          weight: 41.8,
-          species: 'Ahi Tuna',
-          assignedTo: null,
-          split: null,
-          locked: false,
+          contents: [
+            { id: 'b5c1', species: 'Ahi Tuna', grade: 'A+', weight: 39.5, assignedTo: null },
+          ],
         },
       ],
     },
@@ -189,59 +175,59 @@ export default function AllocationBoardPage() {
       id: 'lot2',
       lot: 'LOT-2208',
       vendor: 'Pacific Blue Co.',
-      species: 'Salmon',
-      grade: 'A',
       boxes: [
         {
           id: 'b7',
           n: 'B-4520',
           idx: 1,
-          weight: 31.2,
-          species: 'Salmon',
-          assignedTo: 'o2',
-          split: null,
-          locked: false,
+          contents: [{ id: 'b7c1', species: 'Salmon', grade: 'A', weight: 31.2, assignedTo: 'o2' }],
         },
         {
           id: 'b8',
           n: 'B-4521',
           idx: 2,
-          weight: 33.5,
-          species: 'Salmon',
-          assignedTo: null,
-          split: null,
-          locked: false,
+          contents: [
+            { id: 'b8c1', species: 'Salmon', grade: 'A', weight: 33.5, assignedTo: null },
+            { id: 'b8c2', species: 'Hamachi', grade: 'A+', weight: 4.0, assignedTo: null },
+          ],
         },
         {
           id: 'b9',
           n: 'B-4522',
           idx: 3,
-          weight: 29.8,
-          species: 'Salmon',
-          assignedTo: null,
-          split: null,
-          locked: false,
+          contents: [{ id: 'b9c1', species: 'Salmon', grade: 'A', weight: 29.8, assignedTo: null }],
         },
       ],
     },
   ]);
 
-  // Allocated weight per order, derived live from box assignments
-  const allocatedByOrder: Record<string, number> = {};
-  lots.forEach((lot) =>
-    lot.boxes.forEach((b) => {
-      if (b.assignedTo) {
-        allocatedByOrder[b.assignedTo] = (allocatedByOrder[b.assignedTo] || 0) + b.weight;
-      }
-    })
-  );
-  const orders: Order[] = ordersBase.map((o) => ({
-    ...o,
-    allocated: Math.round(allocatedByOrder[o.id] || 0),
-  }));
+  const getOrder = (id: string | null) => orders.find((o) => o.id === id) || null;
+  const getOrderColor = (id: string | null) => getOrder(id)?.color || '#CCCCCC';
+  const getOrderCode = (id: string | null) => getOrder(id)?.code || '';
+  const selectedOrder = getOrder(selectedOrderId);
 
-  // Assign / reassign / unassign a box to an order
-  const assignBox = (lotId: string, boxId: string, orderId: string | null) => {
+  // Fulfilled weight for a specific order + species, derived live from content assignments.
+  const fulfilled = (orderId: string, species: string) => {
+    let s = 0;
+    lots.forEach((l) =>
+      l.boxes.forEach((b) =>
+        b.contents.forEach((c) => {
+          if (c.assignedTo === orderId && c.species === species) s += c.weight;
+        })
+      )
+    );
+    return round1(s);
+  };
+
+  const orderIsFull = (o: Order) => o.lines.every((ln) => fulfilled(o.id, ln.species) >= ln.target);
+
+  // Assign / unassign a content portion
+  const assignContent = (
+    lotId: string,
+    boxId: string,
+    contentId: string,
+    orderId: string | null
+  ) => {
     if (isLocked) return;
     setLots((prev) =>
       prev.map((lot) =>
@@ -249,114 +235,114 @@ export default function AllocationBoardPage() {
           ? lot
           : {
               ...lot,
-              boxes: lot.boxes.map((b) => (b.id !== boxId ? b : { ...b, assignedTo: orderId })),
+              boxes: lot.boxes.map((b) =>
+                b.id !== boxId
+                  ? b
+                  : {
+                      ...b,
+                      contents: b.contents.map((c) =>
+                        c.id !== contentId ? c : { ...c, assignedTo: orderId }
+                      ),
+                    }
+              ),
             }
       )
     );
   };
 
-  // Click a box: assign to the selected order, or unassign if already on it
-  const handleBoxClick = (lotId: string, box: Box) => {
-    if (isLocked || !selectedOrderId) return;
-    assignBox(lotId, box.id, box.assignedTo === selectedOrderId ? null : selectedOrderId);
+  // Click a portion: assign to the selected order if that order has a line for this species.
+  const handleContentClick = (lotId: string, boxId: string, c: Content) => {
+    if (isLocked || !selectedOrder) return;
+    const orderTakesSpecies = selectedOrder.lines.some((ln) => ln.species === c.species);
+    if (!orderTakesSpecies) return;
+    assignContent(lotId, boxId, c.id, c.assignedTo === selectedOrderId ? null : selectedOrderId);
   };
 
-  // Drop a dragged box onto an order card
-  const handleDropOnOrder = (orderId: string) => {
-    if (isLocked || !draggedBox) return;
-    assignBox(draggedBox.lotId, draggedBox.boxId, orderId);
-    setDraggedBox(null);
-    setDragOverOrderId(null);
-  };
-
-  const round1 = (n: number) => Math.round(n * 10) / 10;
-
-  // Split a box into two pieces (A / B) by weight, each independently assignable
+  // Split a portion into two by weight, each independently assignable
   const confirmSplit = (weightA: number, orderA: string | null, orderB: string | null) => {
-    if (!splitModal) return;
-    const { lotId, box } = splitModal;
-    const wA = round1(Math.min(Math.max(weightA, 0.1), box.weight - 0.1));
-    const wB = round1(box.weight - wA);
+    if (!splitTarget) return;
+    const { lotId, boxId, content } = splitTarget;
+    const wA = round1(Math.min(Math.max(weightA, 0.1), content.weight - 0.1));
+    const wB = round1(content.weight - wA);
     const group = `sg${splitSeq + 1}`;
     setSplitSeq((s) => s + 1);
-    const parentN = box.parentN || box.n;
     setLots((prev) =>
       prev.map((lot) => {
         if (lot.id !== lotId) return lot;
-        const newBoxes: Box[] = [];
-        lot.boxes.forEach((b) => {
-          if (b.id !== box.id) {
-            newBoxes.push(b);
-            return;
-          }
-          newBoxes.push({
-            ...b,
-            id: `${b.id}-a${group}`,
-            n: `${parentN}·A`,
-            weight: wA,
-            assignedTo: orderA,
-            splitGroup: group,
-            parentN,
-            part: 'A',
-          });
-          newBoxes.push({
-            ...b,
-            id: `${b.id}-b${group}`,
-            n: `${parentN}·B`,
-            weight: wB,
-            assignedTo: orderB,
-            splitGroup: group,
-            parentN,
-            part: 'B',
-          });
-        });
-        return { ...lot, boxes: newBoxes };
-      })
-    );
-    setSplitModal(null);
-  };
-
-  // Merge a split back into one whole box (leaves it unassigned)
-  const mergeSplit = (lotId: string, box: Box) => {
-    if (isLocked || !box.splitGroup) return;
-    setLots((prev) =>
-      prev.map((lot) => {
-        if (lot.id !== lotId) return lot;
-        const group = box.splitGroup;
-        const pieces = lot.boxes.filter((b) => b.splitGroup === group);
-        if (pieces.length === 0) return lot;
-        const total = round1(pieces.reduce((s, b) => s + b.weight, 0));
-        const first = pieces[0];
-        const merged: Box = {
-          id: first.id.replace(/-[ab]sg\d+$/, ''),
-          n: first.parentN || first.n,
-          idx: first.idx,
-          weight: total,
-          species: first.species,
-          assignedTo: null,
-          split: null,
-          locked: false,
+        return {
+          ...lot,
+          boxes: lot.boxes.map((b) => {
+            if (b.id !== boxId) return b;
+            const newContents: Content[] = [];
+            b.contents.forEach((c) => {
+              if (c.id !== content.id) {
+                newContents.push(c);
+                return;
+              }
+              newContents.push({
+                ...c,
+                id: `${c.id}-a${group}`,
+                weight: wA,
+                assignedTo: orderA,
+                splitGroup: group,
+                part: 'A',
+              });
+              newContents.push({
+                ...c,
+                id: `${c.id}-b${group}`,
+                weight: wB,
+                assignedTo: orderB,
+                splitGroup: group,
+                part: 'B',
+              });
+            });
+            return { ...b, contents: newContents };
+          }),
         };
-        const newBoxes: Box[] = [];
-        let inserted = false;
-        lot.boxes.forEach((b) => {
-          if (b.splitGroup === group) {
-            if (!inserted) {
-              newBoxes.push(merged);
-              inserted = true;
-            }
-          } else {
-            newBoxes.push(b);
-          }
-        });
-        return { ...lot, boxes: newBoxes };
+      })
+    );
+    setSplitTarget(null);
+  };
+
+  // Merge a split portion back into one
+  const mergeSplit = (lotId: string, boxId: string, group: string) => {
+    if (isLocked) return;
+    setLots((prev) =>
+      prev.map((lot) => {
+        if (lot.id !== lotId) return lot;
+        return {
+          ...lot,
+          boxes: lot.boxes.map((b) => {
+            if (b.id !== boxId) return b;
+            const pieces = b.contents.filter((c) => c.splitGroup === group);
+            if (pieces.length === 0) return b;
+            const total = round1(pieces.reduce((s, c) => s + c.weight, 0));
+            const first = pieces[0];
+            const merged: Content = {
+              id: first.id.replace(/-[ab]sg\d+$/, ''),
+              species: first.species,
+              grade: first.grade,
+              weight: total,
+              assignedTo: null,
+            };
+            const newContents: Content[] = [];
+            let inserted = false;
+            b.contents.forEach((c) => {
+              if (c.splitGroup === group) {
+                if (!inserted) {
+                  newContents.push(merged);
+                  inserted = true;
+                }
+              } else {
+                newContents.push(c);
+              }
+            });
+            return { ...b, contents: newContents };
+          }),
+        };
       })
     );
   };
-
-  const getOrderColor = (orderId: string | null) =>
-    orders.find((o) => o.id === orderId)?.color || '#CCCCCC';
-  const getOrderCode = (orderId: string | null) => orders.find((o) => o.id === orderId)?.code || '';
 
   const iconBtnStyle: React.CSSProperties = {
     display: 'flex',
@@ -373,21 +359,18 @@ export default function AllocationBoardPage() {
     flex: 'none',
   };
 
-  // Count allocated boxes
-  const allocatedBoxes = lots.reduce(
-    (sum, lot) => sum + lot.boxes.filter((b) => b.assignedTo).length,
-    0
-  );
-  const totalWeight = lots.reduce((a, l) => a + l.boxes.reduce((b, bx) => b + bx.weight, 0), 0);
-
-  // Get count of unique customers with allocations
+  // Board-wide tallies
+  const allContents = lots.flatMap((l) => l.boxes.flatMap((b) => b.contents));
+  const assignedCount = allContents.filter((c) => c.assignedTo).length;
+  const totalWeight = round1(allContents.reduce((a, c) => a + c.weight, 0));
+  const totalBoxes = lots.reduce((a, l) => a + l.boxes.length, 0);
   const allocatedCustomers = new Set(
-    lots.flatMap((lot) => lot.boxes.filter((b) => b.assignedTo).map((b) => b.assignedTo))
+    allContents.filter((c) => c.assignedTo).map((c) => c.assignedTo)
   ).size;
 
   const handleLockClick = () => {
-    if (allocatedBoxes === 0) {
-      alert('Cannot lock: No boxes allocated. Please allocate boxes to orders first.');
+    if (assignedCount === 0) {
+      alert('Cannot lock: nothing allocated yet. Assign inventory to orders first.');
       return;
     }
     setLockModalOpen(true);
@@ -395,10 +378,7 @@ export default function AllocationBoardPage() {
 
   const handleConfirmLock = async () => {
     setIsLocking(true);
-
-    // Simulate API call
     await new Promise((resolve) => setTimeout(resolve, 800));
-
     const now = new Date();
     const timeStr = now.toLocaleDateString('en-US', {
       month: 'short',
@@ -407,29 +387,24 @@ export default function AllocationBoardPage() {
       minute: '2-digit',
       timeZone: 'America/Los_Angeles',
     });
-
     setIsLocked(true);
     setLockedAt(timeStr);
     setLockedBy('user@mana.local');
     setLockModalOpen(false);
     setIsLocking(false);
-
-    // Navigate to pick slips after brief delay
-    setTimeout(() => {
-      router.push('/mana/pick-slips');
-    }, 1000);
+    setTimeout(() => router.push('/mana/pick-slips'), 1000);
   };
 
   const handleUnlock = () => {
-    const confirmUnlock = confirm(
-      'Unlock the allocation board? You will be able to edit assignments again. This should only be done if changes are absolutely necessary.'
-    );
-    if (confirmUnlock) {
+    if (confirm('Unlock the allocation board? You will be able to edit assignments again.')) {
       setIsLocked(false);
       setLockedAt('');
       setLockedBy('');
     }
   };
+
+  const rgba = (hex: string, a: number) =>
+    `rgba(${parseInt(hex.slice(1, 3), 16)},${parseInt(hex.slice(3, 5), 16)},${parseInt(hex.slice(5, 7), 16)},${a})`;
 
   return (
     <div
@@ -446,7 +421,6 @@ export default function AllocationBoardPage() {
       <Nav />
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
-        {/* LOCKED BANNER */}
         {isLocked && (
           <div
             style={{
@@ -501,43 +475,7 @@ export default function AllocationBoardPage() {
               Mon · Jun 23 · 06:14 PT
             </span>
           </div>
-
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexBasis: 'auto' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div style={{ display: 'flex', gap: '-8px' }}>
-                {orders.slice(0, 3).map((o) => (
-                  <span
-                    key={o.id}
-                    title={o.customer}
-                    style={{
-                      width: '24px',
-                      height: '24px',
-                      borderRadius: '50%',
-                      background: o.color,
-                      color: '#fff',
-                      fontSize: '9px',
-                      fontWeight: 700,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      marginLeft: '-8px',
-                      border: '2px solid #fff',
-                    }}
-                  >
-                    {o.code[0]}
-                  </span>
-                ))}
-              </div>
-              <span
-                style={{
-                  fontFamily: "'IBM Plex Mono', monospace",
-                  fontSize: '11px',
-                  color: '#8A99A3',
-                }}
-              >
-                3 online
-              </span>
-            </div>
             <span style={{ width: '1px', height: '20px', background: '#E2E6E9' }}></span>
             <button
               onClick={handleLockClick}
@@ -555,12 +493,6 @@ export default function AllocationBoardPage() {
                 whiteSpace: 'nowrap',
                 opacity: isLocked ? 0.6 : 1,
                 transition: 'all 0.15s',
-              }}
-              onMouseEnter={(e) => {
-                if (!isLocked) e.currentTarget.style.background = '#000';
-              }}
-              onMouseLeave={(e) => {
-                if (!isLocked) e.currentTarget.style.background = '#222A30';
               }}
             >
               {isLocked ? '✓ Locked' : 'Lock allocation'}
@@ -611,12 +543,9 @@ export default function AllocationBoardPage() {
               color: '#8A99A3',
             }}
           >
-            <span>{lots.reduce((a, l) => a + l.boxes.length, 0)} orders</span>
+            <span>{totalBoxes} boxes</span>
             <span style={{ width: '1px', height: '14px', background: '#E2E6E9' }}></span>
-            <span>
-              {lots.reduce((a, l) => a + l.boxes.reduce((b, bx) => b + bx.weight, 0), 0).toFixed(1)}{' '}
-              lb
-            </span>
+            <span>{totalWeight.toFixed(1)} lb</span>
             <span style={{ width: '1px', height: '14px', background: '#E2E6E9' }}></span>
             <span style={{ color: '#3F7D5B' }}>● live · synced 2s ago</span>
           </div>
@@ -679,41 +608,15 @@ export default function AllocationBoardPage() {
               }}
             >
               {orders.map((o) => {
-                const allocPct = (o.allocated / o.target) * 100;
+                const selected = selectedOrderId === o.id;
+                const full = orderIsFull(o);
                 return (
                   <div
                     key={o.id}
                     onClick={() => setSelectedOrderId(o.id)}
-                    onDragOver={(e) => {
-                      if (draggedBox && !isLocked) {
-                        e.preventDefault();
-                        if (dragOverOrderId !== o.id) setDragOverOrderId(o.id);
-                      }
-                    }}
-                    onDragLeave={() => setDragOverOrderId((prev) => (prev === o.id ? null : prev))}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      handleDropOnOrder(o.id);
-                    }}
                     style={{
-                      background:
-                        dragOverOrderId === o.id
-                          ? 'rgba(' +
-                            parseInt(o.color.slice(1, 3), 16) +
-                            ',' +
-                            parseInt(o.color.slice(3, 5), 16) +
-                            ',' +
-                            parseInt(o.color.slice(5, 7), 16) +
-                            ', 0.08)'
-                          : selectedOrderId === o.id
-                            ? '#fff'
-                            : '#F4F5F6',
-                      border:
-                        dragOverOrderId === o.id
-                          ? `2px dashed ${o.color}`
-                          : selectedOrderId === o.id
-                            ? `2px solid ${o.color}`
-                            : '1px solid #D6DCE0',
+                      background: selected ? '#fff' : '#F4F5F6',
+                      border: selected ? `2px solid ${o.color}` : '1px solid #D6DCE0',
                       borderRadius: '6px',
                       padding: '12px',
                       cursor: 'pointer',
@@ -752,64 +655,103 @@ export default function AllocationBoardPage() {
                           </span>
                         </div>
                         <div style={{ fontSize: '12px', color: '#8A99A3', marginTop: '5px' }}>
-                          {o.tier} · {o.species}
+                          {o.tier} · {o.lines.length} {o.lines.length === 1 ? 'species' : 'species'}
                         </div>
                       </div>
-                      <span
-                        style={{
-                          fontSize: '12px',
-                          fontWeight: 600,
-                          color: o.color,
-                          background:
-                            'rgba(' +
-                            parseInt(o.color.slice(1, 3), 16) +
-                            ',' +
-                            parseInt(o.color.slice(3, 5), 16) +
-                            ',' +
-                            parseInt(o.color.slice(5, 7), 16) +
-                            ', 0.1)',
-                          borderRadius: '3px',
-                          padding: '4px 8px',
-                        }}
-                      >
-                        {allocPct.toFixed(0)}%
-                      </span>
+                      {full ? (
+                        <span
+                          style={{
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            color: '#2E6347',
+                            background: '#EAF1ED',
+                            borderRadius: '3px',
+                            padding: '4px 8px',
+                          }}
+                        >
+                          ✓ Full
+                        </span>
+                      ) : (
+                        <span
+                          style={{
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            color: o.color,
+                            background: rgba(o.color, 0.1),
+                            borderRadius: '3px',
+                            padding: '4px 8px',
+                          }}
+                        >
+                          {o.lines.filter((ln) => fulfilled(o.id, ln.species) >= ln.target).length}/
+                          {o.lines.length} lines
+                        </span>
+                      )}
                     </div>
+
+                    {/* Per-species fulfillment */}
                     <div
                       style={{
-                        height: '7px',
-                        background: '#EDEFF1',
-                        borderRadius: '2px',
-                        overflow: 'hidden',
-                        marginTop: '13px',
-                      }}
-                    >
-                      <div
-                        style={{ width: `${allocPct}%`, height: '100%', background: o.color }}
-                      ></div>
-                    </div>
-                    <div
-                      style={{
+                        marginTop: '12px',
                         display: 'flex',
-                        alignItems: 'baseline',
-                        justifyContent: 'space-between',
-                        marginTop: '9px',
-                        fontFamily: "'IBM Plex Mono', monospace",
-                        fontSize: '13px',
-                        fontWeight: 500,
+                        flexDirection: 'column',
+                        gap: '10px',
                       }}
                     >
-                      <span>
-                        {o.allocated} / {o.target}
-                      </span>
-                      <span
-                        style={{
-                          fontSize: '11px',
-                          color: o.allocated >= o.target ? '#3F7D5B' : '#8A99A3',
-                        }}
-                      >
-                        {o.allocated >= o.target ? '✓ Full' : `${o.target - o.allocated} needed`}
-                      </span>
+                      {o.lines.map((ln) => {
+                        const f = fulfilled(o.id, ln.species);
+                        const pct = Math.min(100, (f / ln.target) * 100);
+                        const done = f >= ln.target;
+                        return (
+                          <div key={ln.species}>
+                            <div
+                              style={{
+                                display: 'flex',
+                                alignItems: 'baseline',
+                                justifyContent: 'space-between',
+                                marginBottom: '5px',
+                              }}
+                            >
+                              <span style={{ fontSize: '12px', fontWeight: 600 }}>
+                                {ln.species}
+                              </span>
+                              <span
+                                style={{
+                                  fontFamily: "'IBM Plex Mono', monospace",
+                                  fontSize: '12px',
+                                  fontWeight: 500,
+                                }}
+                              >
+                                {f} / {ln.target}
+                                <span
+                                  style={{
+                                    fontSize: '10px',
+                                    color: done ? '#3F7D5B' : '#8A99A3',
+                                    marginLeft: '7px',
+                                  }}
+                                >
+                                  {done ? '✓' : `${round1(ln.target - f)} short`}
+                                </span>
+                              </span>
+                            </div>
+                            <div
+                              style={{
+                                height: '6px',
+                                background: '#EDEFF1',
+                                borderRadius: '2px',
+                                overflow: 'hidden',
+                              }}
+                            >
+                              <div
+                                style={{
+                                  width: `${pct}%`,
+                                  height: '100%',
+                                  background: done ? '#3F7D5B' : o.color,
+                                }}
+                              ></div>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 );
@@ -851,268 +793,321 @@ export default function AllocationBoardPage() {
                 >
                   AVAILABLE INVENTORY
                 </span>
-                {selectedOrderId && (
+                {selectedOrder && (
                   <span style={{ fontSize: '12px', color: '#8A99A3' }}>
-                    — click or drag a box to assign to{' '}
-                    <span style={{ color: getOrderColor(selectedOrderId), fontWeight: 600 }}>
-                      {getOrderCode(selectedOrderId)}
-                    </span>
+                    — click a matching-species portion to assign to{' '}
+                    <span style={{ color: selectedOrder.color, fontWeight: 600 }}>
+                      {selectedOrder.code}
+                    </span>{' '}
+                    ({selectedOrder.lines.map((l) => l.species).join(', ')})
                   </span>
                 )}
               </div>
             </div>
 
-            <div
-              style={{
-                flex: 1,
-                overflowY: 'auto',
-                padding: '18px 22px',
-              }}
-            >
-              {lots.map((lot) => (
-                <div key={lot.id} style={{ marginBottom: '24px' }}>
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      paddingBottom: '9px',
-                      marginBottom: '13px',
-                      borderBottom: '1px solid #E2E6E9',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '18px 22px' }}>
+              {lots.map((lot) => {
+                const speciesInLot = Array.from(
+                  new Set(lot.boxes.flatMap((b) => b.contents.map((c) => c.species)))
+                );
+                return (
+                  <div key={lot.id} style={{ marginBottom: '24px' }}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        paddingBottom: '9px',
+                        marginBottom: '13px',
+                        borderBottom: '1px solid #E2E6E9',
+                      }}
+                    >
                       <span
                         style={{
                           fontFamily: "'IBM Plex Mono', monospace",
                           fontSize: '13px',
                           fontWeight: 600,
-                          color: '#222A30',
                         }}
                       >
                         {lot.lot}
                       </span>
-                      <span style={{ fontSize: '13px', fontWeight: 600 }}>{lot.species}</span>
-                      <span
-                        style={{
-                          fontSize: '11px',
-                          fontWeight: 600,
-                          color: '#5A6670',
-                          border: '1px solid #D6DCE0',
-                          borderRadius: '2px',
-                          padding: '1px 7px',
-                        }}
-                      >
-                        {lot.grade}
+                      <span style={{ fontSize: '13px', fontWeight: 600 }}>
+                        {speciesInLot.length > 1
+                          ? `Mixed · ${speciesInLot.length} species`
+                          : speciesInLot[0]}
                       </span>
-                      <span style={{ fontSize: '12px', color: '#8A99A3' }}>{lot.vendor}</span>
+                      {speciesInLot.length > 1 && (
+                        <span style={{ fontSize: '11px', color: '#8A99A3' }}>
+                          {speciesInLot.join(' · ')}
+                        </span>
+                      )}
+                      <span style={{ fontSize: '12px', color: '#8A99A3', marginLeft: 'auto' }}>
+                        {lot.vendor}
+                      </span>
                     </div>
-                  </div>
 
-                  <div
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
-                      gap: '9px',
-                    }}
-                  >
-                    {lot.boxes.map((box) => {
-                      const boxColor = box.assignedTo ? getOrderColor(box.assignedTo) : '#D6DCE0';
-                      const isDragging =
-                        draggedBox?.lotId === lot.id && draggedBox?.boxId === box.id;
-                      return (
-                        <div
-                          key={box.id}
-                          draggable={!isLocked}
-                          onDragStart={() => {
-                            if (!isLocked) setDraggedBox({ lotId: lot.id, boxId: box.id });
-                          }}
-                          onDragEnd={() => {
-                            setDraggedBox(null);
-                            setDragOverOrderId(null);
-                          }}
-                          onClick={() => handleBoxClick(lot.id, box)}
-                          title={
-                            isLocked
-                              ? 'Board is locked'
-                              : selectedOrderId
-                                ? box.assignedTo === selectedOrderId
-                                  ? 'Click to unassign · or drag to another order'
-                                  : `Click to assign to ${getOrderCode(selectedOrderId)} · or drag to an order`
-                                : 'Select an order, then click · or drag this box onto an order'
-                          }
-                          style={{
-                            background: box.assignedTo
-                              ? 'rgba(' +
-                                parseInt(boxColor.slice(1, 3), 16) +
-                                ',' +
-                                parseInt(boxColor.slice(3, 5), 16) +
-                                ',' +
-                                parseInt(boxColor.slice(5, 7), 16) +
-                                ', 0.08)'
-                              : '#fff',
-                            border: box.assignedTo ? '1px solid #BBD0DB' : '1px solid #D6DCE0',
-                            borderLeft: `3px solid ${boxColor}`,
-                            borderRadius: '5px',
-                            padding: '12px',
-                            cursor: isLocked ? 'not-allowed' : 'grab',
-                            position: 'relative',
-                            transition: 'all 0.15s',
-                            opacity: isLocked ? 0.7 : isDragging ? 0.4 : 1,
-                          }}
-                          onMouseOver={(e) => {
-                            if (!isLocked && !box.assignedTo)
-                              e.currentTarget.style.borderColor = '#BBD0DB';
-                          }}
-                          onMouseOut={(e) => {
-                            if (!isLocked && !box.assignedTo)
-                              e.currentTarget.style.borderColor = '#D6DCE0';
-                          }}
-                        >
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fill, minmax(228px, 1fr))',
+                        gap: '10px',
+                      }}
+                    >
+                      {lot.boxes.map((box) => {
+                        const boxWeight = round1(box.contents.reduce((a, c) => a + c.weight, 0));
+                        const mixed = new Set(box.contents.map((c) => c.species)).size > 1;
+                        return (
                           <div
+                            key={box.id}
                             style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              gap: '6px',
+                              background: '#fff',
+                              border: '1px solid #D6DCE0',
+                              borderRadius: '6px',
+                              padding: '11px',
+                              opacity: isLocked ? 0.75 : 1,
                             }}
                           >
-                            <span
-                              style={{
-                                fontFamily: "'IBM Plex Mono', monospace",
-                                fontSize: '13px',
-                                fontWeight: 600,
-                                color: box.assignedTo ? boxColor : '#222A30',
-                                whiteSpace: 'nowrap',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                              }}
-                            >
-                              {box.n}
-                            </span>
+                            {/* box header */}
                             <div
                               style={{
                                 display: 'flex',
                                 alignItems: 'center',
-                                gap: '5px',
-                                flex: 'none',
+                                justifyContent: 'space-between',
+                                marginBottom: '9px',
                               }}
                             >
-                              {box.assignedTo && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
                                 <span
                                   style={{
-                                    fontSize: '9px',
-                                    fontWeight: 700,
-                                    color: '#fff',
-                                    background: getOrderColor(box.assignedTo),
-                                    borderRadius: '2px',
-                                    padding: '2px 6px',
+                                    fontFamily: "'IBM Plex Mono', monospace",
+                                    fontSize: '13px',
+                                    fontWeight: 600,
                                   }}
                                 >
-                                  {getOrderCode(box.assignedTo)}
+                                  {box.n}
                                 </span>
-                              )}
-                              {!isLocked &&
-                                (box.splitGroup ? (
-                                  <button
-                                    title="Merge split back into one box"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      mergeSplit(lot.id, box);
+                                {mixed && (
+                                  <span
+                                    style={{
+                                      fontSize: '9px',
+                                      fontWeight: 700,
+                                      letterSpacing: '0.04em',
+                                      color: '#8A5A14',
+                                      background: '#F4EEE2',
+                                      border: '1px solid #E4D2A8',
+                                      borderRadius: '2px',
+                                      padding: '1px 6px',
                                     }}
-                                    style={iconBtnStyle}
                                   >
-                                    <svg
-                                      width="13"
-                                      height="13"
-                                      viewBox="0 0 24 24"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      strokeWidth="2"
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                    >
-                                      <polyline points="9 7 4 12 9 17" />
-                                      <polyline points="15 7 20 12 15 17" />
-                                    </svg>
-                                  </button>
-                                ) : (
-                                  <button
-                                    title="Split this box by weight"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setSplitModal({ lotId: lot.id, box });
-                                    }}
-                                    style={iconBtnStyle}
-                                  >
-                                    <svg
-                                      width="13"
-                                      height="13"
-                                      viewBox="0 0 24 24"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      strokeWidth="2"
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                    >
-                                      <circle cx="6" cy="6" r="3" />
-                                      <circle cx="6" cy="18" r="3" />
-                                      <line x1="20" y1="4" x2="8.12" y2="15.88" />
-                                      <line x1="14.47" y1="14.48" x2="20" y2="20" />
-                                      <line x1="8.12" y1="8.12" x2="12" y2="12" />
-                                    </svg>
-                                  </button>
-                                ))}
-                            </div>
-                          </div>
-                          <div
-                            style={{
-                              display: 'flex',
-                              alignItems: 'baseline',
-                              justifyContent: 'space-between',
-                              marginTop: '9px',
-                            }}
-                          >
-                            {box.splitGroup ? (
+                                    MIXED
+                                  </span>
+                                )}
+                              </div>
                               <span
                                 style={{
-                                  fontSize: '9px',
-                                  fontWeight: 700,
-                                  letterSpacing: '0.04em',
-                                  color: '#8A5A14',
-                                  background: '#F4EEE2',
-                                  border: '1px solid #E4D2A8',
-                                  borderRadius: '2px',
-                                  padding: '2px 6px',
+                                  fontFamily: "'IBM Plex Mono', monospace",
+                                  fontSize: '13px',
+                                  fontWeight: 600,
+                                  color: '#5A6670',
                                 }}
                               >
-                                SPLIT · {box.part}
+                                {boxWeight} lb
                               </span>
-                            ) : (
-                              <span style={{ fontSize: '11px', color: '#8A99A3', fontWeight: 500 }}>
-                                #{box.idx}
-                              </span>
-                            )}
-                            <span
-                              style={{
-                                fontFamily: "'IBM Plex Mono', monospace",
-                                fontSize: '18px',
-                                fontWeight: 600,
-                              }}
-                            >
-                              {box.weight}
-                              <span style={{ fontSize: '11px', color: '#8A99A3', fontWeight: 500 }}>
-                                {' '}
-                                lb
-                              </span>
-                            </span>
+                            </div>
+
+                            {/* content portions */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                              {box.contents.map((c) => {
+                                const assigned = !!c.assignedTo;
+                                const canAssign =
+                                  !isLocked &&
+                                  selectedOrder &&
+                                  selectedOrder.lines.some((ln) => ln.species === c.species);
+                                const clr = assigned ? getOrderColor(c.assignedTo) : '#D6DCE0';
+                                return (
+                                  <div
+                                    key={c.id}
+                                    onClick={() => handleContentClick(lot.id, box.id, c)}
+                                    title={
+                                      isLocked
+                                        ? 'Board is locked'
+                                        : !selectedOrder
+                                          ? 'Select an order first'
+                                          : canAssign
+                                            ? assigned && c.assignedTo === selectedOrderId
+                                              ? 'Click to unassign'
+                                              : `Click to assign to ${selectedOrder.code}`
+                                            : `${selectedOrder.code} has no ${c.species} line`
+                                    }
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '8px',
+                                      background: assigned ? rgba(clr, 0.08) : '#F8F9FA',
+                                      border: '1px solid #E2E6E9',
+                                      borderLeft: `3px solid ${clr}`,
+                                      borderRadius: '4px',
+                                      padding: '7px 9px',
+                                      cursor: isLocked
+                                        ? 'not-allowed'
+                                        : canAssign
+                                          ? 'pointer'
+                                          : 'default',
+                                      opacity:
+                                        !isLocked && selectedOrder && !canAssign && !assigned
+                                          ? 0.55
+                                          : 1,
+                                    }}
+                                  >
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                      <div
+                                        style={{
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '6px',
+                                        }}
+                                      >
+                                        <span
+                                          style={{
+                                            fontSize: '12px',
+                                            fontWeight: 600,
+                                            whiteSpace: 'nowrap',
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                          }}
+                                        >
+                                          {c.species}
+                                        </span>
+                                        <span
+                                          style={{
+                                            fontSize: '9px',
+                                            fontWeight: 700,
+                                            color: '#5A6670',
+                                            border: '1px solid #D6DCE0',
+                                            borderRadius: '2px',
+                                            padding: '0 4px',
+                                          }}
+                                        >
+                                          {c.grade}
+                                        </span>
+                                        {c.splitGroup && (
+                                          <span
+                                            style={{
+                                              fontSize: '9px',
+                                              fontWeight: 700,
+                                              color: '#8A5A14',
+                                              background: '#F4EEE2',
+                                              border: '1px solid #E4D2A8',
+                                              borderRadius: '2px',
+                                              padding: '0 4px',
+                                            }}
+                                          >
+                                            {c.part}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <span
+                                      style={{
+                                        fontFamily: "'IBM Plex Mono', monospace",
+                                        fontSize: '13px',
+                                        fontWeight: 600,
+                                        flex: 'none',
+                                      }}
+                                    >
+                                      {c.weight}
+                                      <span
+                                        style={{
+                                          fontSize: '10px',
+                                          color: '#8A99A3',
+                                          fontWeight: 500,
+                                        }}
+                                      >
+                                        {' '}
+                                        lb
+                                      </span>
+                                    </span>
+                                    {assigned && (
+                                      <span
+                                        style={{
+                                          fontSize: '9px',
+                                          fontWeight: 700,
+                                          color: '#fff',
+                                          background: clr,
+                                          borderRadius: '2px',
+                                          padding: '2px 6px',
+                                          flex: 'none',
+                                        }}
+                                      >
+                                        {getOrderCode(c.assignedTo)}
+                                      </span>
+                                    )}
+                                    {!isLocked &&
+                                      (c.splitGroup ? (
+                                        <button
+                                          title="Merge split"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            mergeSplit(lot.id, box.id, c.splitGroup!);
+                                          }}
+                                          style={iconBtnStyle}
+                                        >
+                                          <svg
+                                            width="12"
+                                            height="12"
+                                            viewBox="0 0 24 24"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            strokeWidth="2"
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                          >
+                                            <polyline points="9 7 4 12 9 17" />
+                                            <polyline points="15 7 20 12 15 17" />
+                                          </svg>
+                                        </button>
+                                      ) : (
+                                        <button
+                                          title="Split this portion by weight"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSplitTarget({
+                                              lotId: lot.id,
+                                              boxId: box.id,
+                                              content: c,
+                                            });
+                                          }}
+                                          style={iconBtnStyle}
+                                        >
+                                          <svg
+                                            width="12"
+                                            height="12"
+                                            viewBox="0 0 24 24"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            strokeWidth="2"
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                          >
+                                            <circle cx="6" cy="6" r="3" />
+                                            <circle cx="6" cy="18" r="3" />
+                                            <line x1="20" y1="4" x2="8.12" y2="15.88" />
+                                            <line x1="14.47" y1="14.48" x2="20" y2="20" />
+                                            <line x1="8.12" y1="8.12" x2="12" y2="12" />
+                                          </svg>
+                                        </button>
+                                      ))}
+                                  </div>
+                                );
+                              })}
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
@@ -1120,7 +1115,7 @@ export default function AllocationBoardPage() {
 
       <ConfirmLockModal
         isOpen={lockModalOpen}
-        allocationCount={allocatedBoxes}
+        allocationCount={assignedCount}
         totalWeight={totalWeight}
         orderCount={allocatedCustomers}
         onConfirm={handleConfirmLock}
@@ -1129,18 +1124,17 @@ export default function AllocationBoardPage() {
       />
 
       <SplitBoxModal
-        isOpen={!!splitModal}
-        boxLabel={splitModal?.box.parentN || splitModal?.box.n || ''}
-        totalWeight={splitModal?.box.weight || 0}
-        orders={orders.map((o) => ({
-          id: o.id,
-          code: o.code,
-          customer: o.customer,
-          color: o.color,
-        }))}
+        isOpen={!!splitTarget}
+        boxLabel={splitTarget ? `${splitTarget.content.species} in this box` : ''}
+        totalWeight={splitTarget?.content.weight || 0}
+        orders={orders
+          .filter(
+            (o) => !splitTarget || o.lines.some((ln) => ln.species === splitTarget.content.species)
+          )
+          .map((o) => ({ id: o.id, code: o.code, customer: o.customer, color: o.color }))}
         defaultOrderA={selectedOrderId}
         onConfirm={confirmSplit}
-        onCancel={() => setSplitModal(null)}
+        onCancel={() => setSplitTarget(null)}
       />
     </div>
   );
