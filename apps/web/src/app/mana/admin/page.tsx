@@ -24,6 +24,8 @@ interface SKU {
   uom: string | null;
   qbo_item: string | null;
   active: boolean;
+  base_price_lb: number | null;
+  description: string | null;
 }
 
 interface PricingTier {
@@ -110,24 +112,68 @@ export default function AdminPage() {
   const closeEditor = () => setEditor({ open: false, title: '', subtitle: '' });
 
   // Real editors: SKU add + tier edit write to Supabase
-  const EMPTY_SKU = { code: '', species: '', grade: '', pack_type: 'Box', uom: 'lb', qbo_item: '' };
+  const EMPTY_SKU = {
+    code: '',
+    species: '',
+    grade: '',
+    pack_type: 'Box',
+    uom: 'lb',
+    qbo_item: '',
+    base_price_lb: '',
+    description: '',
+  };
   const [skuModal, setSkuModal] = useState(false);
   const [skuForm, setSkuForm] = useState(EMPTY_SKU);
   const [savingSku, setSavingSku] = useState(false);
   const [skuError, setSkuError] = useState('');
+  // inline base-price editing on the SKU table
+  const [priceEdit, setPriceEdit] = useState<{ code: string; draft: string } | null>(null);
 
   const [tierModal, setTierModal] = useState<{
     tier: string;
     label: string;
     terms: string;
     mult: string;
+    // per-species price for THIS tier, keyed by sku code (string drafts for inputs)
+    prices: Record<string, string>;
   } | null>(null);
   const [savingTier, setSavingTier] = useState(false);
+
+  // Open the tier editor pre-filled: explicit tier price if set, else base × multiplier
+  const openTierModal = (t: PricingTier) => {
+    const prices: Record<string, string> = {};
+    skus
+      .filter((s) => s.active)
+      .forEach((s) => {
+        const override = tierPrices[t.tier]?.[s.code];
+        const auto =
+          s.base_price_lb != null
+            ? Math.round(s.base_price_lb * t.base_multiplier * 100) / 100
+            : null;
+        prices[s.code] = override !== undefined ? override.toFixed(2) : auto ? auto.toFixed(2) : '';
+      });
+    setTierModal({
+      tier: t.tier,
+      label: t.label,
+      terms: t.terms || '',
+      mult: t.base_multiplier.toFixed(2),
+      prices,
+    });
+  };
+
+  // species-specific price per tier: { [tier]: { [sku_code]: price } }
+  const [tierPrices, setTierPrices] = useState<Record<string, Record<string, number>>>({});
+  const [tierPriceEdit, setTierPriceEdit] = useState<{
+    tier: string;
+    code: string;
+    draft: string;
+  } | null>(null);
 
   const saveSku = async () => {
     if (!skuForm.code || !skuForm.species) return;
     setSavingSku(true);
     setSkuError('');
+    const priceNum = parseFloat(skuForm.base_price_lb);
     const { error } = await supabase.from('skus').insert({
       code: skuForm.code.toUpperCase(),
       species: skuForm.species,
@@ -135,6 +181,8 @@ export default function AdminPage() {
       pack_type: skuForm.pack_type || null,
       uom: skuForm.uom || 'lb',
       qbo_item: skuForm.qbo_item || null,
+      base_price_lb: priceNum > 0 ? Math.round(priceNum * 100) / 100 : null,
+      description: skuForm.description.trim() || null,
       active: true,
     });
     setSavingSku(false);
@@ -151,6 +199,51 @@ export default function AdminPage() {
     fetchSkus();
   };
 
+  const saveBasePrice = async () => {
+    if (!priceEdit) return;
+    const v = parseFloat(priceEdit.draft);
+    if (v > 0) {
+      await supabase
+        .from('skus')
+        .update({ base_price_lb: Math.round(v * 100) / 100 })
+        .eq('code', priceEdit.code);
+      fetchSkus();
+    }
+    setPriceEdit(null);
+  };
+
+  async function fetchTierPrices() {
+    const { data } = await supabase.from('tier_species_prices').select('*');
+    const map: Record<string, Record<string, number>> = {};
+    (data ?? []).forEach((r: { tier: string; sku_code: string; price_lb: number }) => {
+      if (!map[r.tier]) map[r.tier] = {};
+      map[r.tier][r.sku_code] = Number(r.price_lb);
+    });
+    setTierPrices(map);
+  }
+
+  const saveTierPrice = async () => {
+    if (!tierPriceEdit) return;
+    const v = parseFloat(tierPriceEdit.draft);
+    if (v > 0) {
+      await supabase.from('tier_species_prices').upsert(
+        {
+          tier: tierPriceEdit.tier,
+          sku_code: tierPriceEdit.code,
+          price_lb: Math.round(v * 100) / 100,
+        },
+        { onConflict: 'tier,sku_code' }
+      );
+      fetchTierPrices();
+    }
+    setTierPriceEdit(null);
+  };
+
+  const clearTierPrice = async (tier: string, code: string) => {
+    await supabase.from('tier_species_prices').delete().eq('tier', tier).eq('sku_code', code);
+    fetchTierPrices();
+  };
+
   const saveTier = async () => {
     if (!tierModal) return;
     setSavingTier(true);
@@ -158,15 +251,39 @@ export default function AdminPage() {
       .from('pricing_tiers')
       .update({ terms: tierModal.terms, base_multiplier: parseFloat(tierModal.mult) || 1 })
       .eq('tier', tierModal.tier);
+
+    // Persist the species prices for this tier: filled = explicit price (upsert),
+    // cleared = back to the multiplier (delete the override row)
+    const upserts: { tier: string; sku_code: string; price_lb: number }[] = [];
+    const deletes: string[] = [];
+    Object.entries(tierModal.prices).forEach(([code, draft]) => {
+      const v = parseFloat(draft);
+      if (v > 0)
+        upserts.push({ tier: tierModal.tier, sku_code: code, price_lb: Math.round(v * 100) / 100 });
+      else if (tierPrices[tierModal.tier]?.[code] !== undefined) deletes.push(code);
+    });
+    if (upserts.length > 0) {
+      await supabase.from('tier_species_prices').upsert(upserts, { onConflict: 'tier,sku_code' });
+    }
+    if (deletes.length > 0) {
+      await supabase
+        .from('tier_species_prices')
+        .delete()
+        .eq('tier', tierModal.tier)
+        .in('sku_code', deletes);
+    }
+
     setSavingTier(false);
     setTierModal(null);
     fetchTiers();
+    fetchTierPrices();
   };
 
   useEffect(() => {
     fetchUsers();
     fetchSkus();
     fetchTiers();
+    fetchTierPrices();
   }, []);
 
   async function fetchUsers() {
@@ -579,9 +696,9 @@ export default function AdminPage() {
                   }}
                 >
                   <span>CODE</span>
-                  <span>SPECIES</span>
+                  <span>SPECIES · DESCRIPTION</span>
                   <span>GRADE</span>
-                  <span>PACK TYPE</span>
+                  <span style={{ textAlign: 'right' }}>BASE $/LB</span>
                   <span>UOM</span>
                   <span>QBO ITEM NAME</span>
                   <span>STATUS</span>
@@ -612,12 +729,79 @@ export default function AdminPage() {
                       >
                         {s.code}
                       </span>
-                      <span style={{ fontSize: '14px', fontWeight: 600 }}>{s.species}</span>
+                      <span style={{ minWidth: 0, paddingRight: '12px' }}>
+                        <span style={{ fontSize: '14px', fontWeight: 600 }}>{s.species}</span>
+                        {s.description && (
+                          <span
+                            style={{
+                              display: 'block',
+                              fontSize: '11px',
+                              color: '#8A99A3',
+                              marginTop: '2px',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {s.description}
+                          </span>
+                        )}
+                      </span>
                       <span style={{ fontSize: '12px', color: '#5A6670', fontWeight: 600 }}>
                         {s.grade || '—'}
                       </span>
-                      <span style={{ fontSize: '12px', color: '#5A6670' }}>
-                        {s.pack_type || '—'}
+                      <span style={{ textAlign: 'right' }}>
+                        {priceEdit?.code === s.code ? (
+                          <input
+                            autoFocus
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={priceEdit.draft}
+                            onChange={(e) =>
+                              setPriceEdit((p) => (p ? { ...p, draft: e.target.value } : p))
+                            }
+                            onBlur={saveBasePrice}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') saveBasePrice();
+                              if (e.key === 'Escape') setPriceEdit(null);
+                            }}
+                            style={{
+                              fontFamily: "'IBM Plex Mono', monospace",
+                              fontSize: '12px',
+                              fontWeight: 600,
+                              width: '72px',
+                              padding: '4px 6px',
+                              border: '1.5px solid #3F6F86',
+                              borderRadius: '4px',
+                              outline: 'none',
+                              textAlign: 'right',
+                            }}
+                          />
+                        ) : (
+                          <button
+                            onClick={() =>
+                              setPriceEdit({
+                                code: s.code,
+                                draft: s.base_price_lb ? s.base_price_lb.toFixed(2) : '',
+                              })
+                            }
+                            title="Click to edit base price"
+                            style={{
+                              fontFamily: "'IBM Plex Mono', monospace",
+                              fontSize: '13px',
+                              fontWeight: 700,
+                              background: 'none',
+                              border: 'none',
+                              borderBottom: '1px dashed #C2CAD0',
+                              padding: '2px 0',
+                              cursor: 'pointer',
+                              color: s.base_price_lb ? '#222A30' : '#B7791F',
+                            }}
+                          >
+                            {s.base_price_lb ? '$' + s.base_price_lb.toFixed(2) : 'Set price'}
+                          </button>
+                        )}
                       </span>
                       <span
                         style={{
@@ -741,14 +925,7 @@ export default function AdminPage() {
                         </div>
                       </div>
                       <button
-                        onClick={() =>
-                          setTierModal({
-                            tier: t.tier,
-                            label: t.label,
-                            terms: t.terms || '',
-                            mult: t.base_multiplier.toFixed(2),
-                          })
-                        }
+                        onClick={() => openTierModal(t)}
                         style={{
                           fontFamily: "'Archivo', sans-serif",
                           fontSize: '12px',
@@ -823,6 +1000,207 @@ export default function AdminPage() {
                         >
                           + Add customer
                         </button>
+                      </div>
+                    </div>
+
+                    {/* SPECIES PRICING — per-species price for THIS tier (beats the multiplier) */}
+                    <div
+                      style={{
+                        marginTop: '14px',
+                        paddingTop: '14px',
+                        borderTop: '1px solid #EDEFF1',
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'baseline',
+                          justifyContent: 'space-between',
+                          marginBottom: '8px',
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            letterSpacing: '0.05em',
+                            color: '#8A99A3',
+                          }}
+                        >
+                          SPECIES PRICING
+                        </span>
+                        <span style={{ fontSize: '11px', color: '#8A99A3' }}>
+                          auto = base × {t.base_multiplier.toFixed(2)} · click to set a species
+                          price for this tier
+                        </span>
+                      </div>
+                      <div
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))',
+                          gap: '8px',
+                        }}
+                      >
+                        {skus
+                          .filter((s) => s.active)
+                          .map((s) => {
+                            const override = tierPrices[t.tier]?.[s.code];
+                            const auto =
+                              s.base_price_lb != null
+                                ? Math.round(s.base_price_lb * t.base_multiplier * 100) / 100
+                                : null;
+                            const isEditing =
+                              tierPriceEdit?.tier === t.tier && tierPriceEdit.code === s.code;
+                            return (
+                              <div
+                                key={s.code}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  gap: '8px',
+                                  background: '#F8F9FA',
+                                  border: '1px solid #E2E6E9',
+                                  borderLeft: `3px solid ${override !== undefined ? '#3F6F86' : '#D6DCE0'}`,
+                                  borderRadius: '5px',
+                                  padding: '8px 10px',
+                                }}
+                              >
+                                <span style={{ minWidth: 0 }}>
+                                  <span
+                                    style={{
+                                      display: 'block',
+                                      fontSize: '12px',
+                                      fontWeight: 600,
+                                      whiteSpace: 'nowrap',
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                    }}
+                                  >
+                                    {s.species}
+                                    {s.grade ? ` · ${s.grade}` : ''}
+                                  </span>
+                                  <span
+                                    style={{
+                                      fontFamily: "'IBM Plex Mono', monospace",
+                                      fontSize: '10px',
+                                      color: '#8A99A3',
+                                    }}
+                                  >
+                                    {s.code}
+                                  </span>
+                                </span>
+                                {isEditing ? (
+                                  <input
+                                    autoFocus
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    value={tierPriceEdit.draft}
+                                    onChange={(e) =>
+                                      setTierPriceEdit((p) =>
+                                        p ? { ...p, draft: e.target.value } : p
+                                      )
+                                    }
+                                    onBlur={saveTierPrice}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') saveTierPrice();
+                                      if (e.key === 'Escape') setTierPriceEdit(null);
+                                    }}
+                                    style={{
+                                      fontFamily: "'IBM Plex Mono', monospace",
+                                      fontSize: '12px',
+                                      fontWeight: 600,
+                                      width: '70px',
+                                      padding: '4px 6px',
+                                      border: '1.5px solid #3F6F86',
+                                      borderRadius: '4px',
+                                      outline: 'none',
+                                      textAlign: 'right',
+                                      flex: 'none',
+                                    }}
+                                  />
+                                ) : (
+                                  <span
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      flex: 'none',
+                                    }}
+                                  >
+                                    {override !== undefined && (
+                                      <button
+                                        onClick={() => clearTierPrice(t.tier, s.code)}
+                                        title="Remove species price — back to the tier multiplier"
+                                        style={{
+                                          width: '15px',
+                                          height: '15px',
+                                          borderRadius: '3px',
+                                          border: '1px solid #C5D8E2',
+                                          background: '#EEF3F6',
+                                          color: '#3F6F86',
+                                          fontSize: '10px',
+                                          lineHeight: 1,
+                                          cursor: 'pointer',
+                                          padding: 0,
+                                        }}
+                                      >
+                                        ×
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={() =>
+                                        setTierPriceEdit({
+                                          tier: t.tier,
+                                          code: s.code,
+                                          draft: (override ?? auto ?? 0).toFixed(2),
+                                        })
+                                      }
+                                      title={
+                                        override !== undefined
+                                          ? 'Species price for this tier — click to edit'
+                                          : auto != null
+                                            ? `Auto from base × multiplier — click to set a species price`
+                                            : 'No base price set — click to set one for this tier'
+                                      }
+                                      style={{
+                                        fontFamily: "'IBM Plex Mono', monospace",
+                                        fontSize: '12px',
+                                        fontWeight: override !== undefined ? 700 : 500,
+                                        color:
+                                          override !== undefined
+                                            ? '#2D5365'
+                                            : auto != null
+                                              ? '#5A6670'
+                                              : '#B7791F',
+                                        background:
+                                          override !== undefined ? '#EEF3F6' : 'transparent',
+                                        border:
+                                          override !== undefined
+                                            ? '1px solid #C5D8E2'
+                                            : '1px dashed #D6DCE0',
+                                        borderRadius: '4px',
+                                        padding: '3px 8px',
+                                        cursor: 'pointer',
+                                      }}
+                                    >
+                                      {override !== undefined
+                                        ? '$' + override.toFixed(2)
+                                        : auto != null
+                                          ? '$' + auto.toFixed(2)
+                                          : 'set'}
+                                    </button>
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        {skus.filter((s) => s.active).length === 0 && (
+                          <span style={{ fontSize: '12px', color: '#8A99A3' }}>
+                            No active species yet — add one in SKU Master.
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1476,7 +1854,72 @@ export default function AdminPage() {
                   onChange={(e) => setSkuForm((f) => ({ ...f, qbo_item: e.target.value }))}
                 />
               </div>
+              <div>
+                <label style={labelStyle}>BASE PRICE $/LB</label>
+                <input
+                  style={{ ...inputStyle, fontFamily: "'IBM Plex Mono', monospace" }}
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="24.50"
+                  value={skuForm.base_price_lb}
+                  onChange={(e) => setSkuForm((f) => ({ ...f, base_price_lb: e.target.value }))}
+                />
+              </div>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={labelStyle}>DESCRIPTION</label>
+                <textarea
+                  style={{ ...inputStyle, minHeight: '60px', resize: 'vertical' }}
+                  placeholder="Sashimi-grade loins, premium — notes the sales team should see"
+                  value={skuForm.description}
+                  onChange={(e) => setSkuForm((f) => ({ ...f, description: e.target.value }))}
+                />
+              </div>
             </div>
+
+            {/* live tier price preview from the base price */}
+            {parseFloat(skuForm.base_price_lb) > 0 && tiers.length > 0 && (
+              <div
+                style={{
+                  display: 'flex',
+                  gap: '10px',
+                  marginTop: '14px',
+                  background: '#F4F5F6',
+                  border: '1px solid #E2E6E9',
+                  borderRadius: '6px',
+                  padding: '11px 13px',
+                }}
+              >
+                {tiers.map((t) => (
+                  <div key={t.tier} style={{ flex: 1 }}>
+                    <div
+                      style={{
+                        fontSize: '10px',
+                        fontWeight: 700,
+                        letterSpacing: '0.05em',
+                        color: '#8A99A3',
+                      }}
+                    >
+                      {t.tier} · {t.base_multiplier.toFixed(2)}×
+                    </div>
+                    <div
+                      style={{
+                        fontFamily: "'IBM Plex Mono', monospace",
+                        fontSize: '14px',
+                        fontWeight: 600,
+                        marginTop: '3px',
+                      }}
+                    >
+                      $
+                      {(
+                        Math.round(parseFloat(skuForm.base_price_lb) * t.base_multiplier * 100) /
+                        100
+                      ).toFixed(2)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
             {skuError && (
               <div
                 style={{
@@ -1559,8 +2002,11 @@ export default function AdminPage() {
               background: '#fff',
               borderRadius: '10px',
               padding: '26px',
-              width: '400px',
+              width: '520px',
               maxWidth: '94vw',
+              maxHeight: '86vh',
+              display: 'flex',
+              flexDirection: 'column',
               boxShadow: '0 16px 48px rgba(34,42,48,0.22)',
             }}
             onClick={(e) => e.stopPropagation()}
@@ -1589,7 +2035,7 @@ export default function AdminPage() {
                 />
               </div>
               <div>
-                <label style={labelStyle}>PRICE MULTIPLIER</label>
+                <label style={labelStyle}>DEFAULT MULTIPLIER (fallback)</label>
                 <input
                   style={{ ...inputStyle, fontFamily: "'IBM Plex Mono', monospace" }}
                   type="number"
@@ -1600,12 +2046,146 @@ export default function AdminPage() {
                 />
               </div>
             </div>
+
+            {/* SPECIES PRICES for this tier — every species has its own price */}
+            <div
+              style={{ marginTop: '18px', minHeight: 0, display: 'flex', flexDirection: 'column' }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'baseline',
+                  justifyContent: 'space-between',
+                  marginBottom: '8px',
+                }}
+              >
+                <label style={{ ...labelStyle, marginBottom: 0 }}>
+                  SPECIES PRICES · $/LB ON {tierModal.tier}
+                </label>
+                <button
+                  onClick={() =>
+                    setTierModal((m) => {
+                      if (!m) return m;
+                      const mult = parseFloat(m.mult) || 1;
+                      const next = { ...m.prices };
+                      skus
+                        .filter((s) => s.active && s.base_price_lb != null)
+                        .forEach((s) => {
+                          next[s.code] = (
+                            Math.round((s.base_price_lb as number) * mult * 100) / 100
+                          ).toFixed(2);
+                        });
+                      return { ...m, prices: next };
+                    })
+                  }
+                  title="Refill every species from base price × the multiplier above"
+                  style={{
+                    fontFamily: "'Archivo', sans-serif",
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    color: '#3F6F86',
+                    background: '#EEF3F6',
+                    border: '1px solid #C5D8E2',
+                    borderRadius: '4px',
+                    padding: '4px 9px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Fill from multiplier
+                </button>
+              </div>
+
+              <div
+                style={{
+                  overflowY: 'auto',
+                  border: '1px solid #E2E6E9',
+                  borderRadius: '6px',
+                }}
+              >
+                {skus.filter((s) => s.active).length === 0 && (
+                  <div style={{ padding: '16px', fontSize: '12px', color: '#8A99A3' }}>
+                    No active species yet — add them in SKU Master first.
+                  </div>
+                )}
+                {skus
+                  .filter((s) => s.active)
+                  .map((s, i) => {
+                    const auto =
+                      s.base_price_lb != null
+                        ? Math.round(s.base_price_lb * (parseFloat(tierModal.mult) || 1) * 100) /
+                          100
+                        : null;
+                    return (
+                      <div
+                        key={s.code}
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: '1fr 110px',
+                          alignItems: 'center',
+                          gap: '10px',
+                          padding: '9px 12px',
+                          borderBottom: '1px solid #EDEFF1',
+                          background: i % 2 === 0 ? '#fff' : '#FAFBFB',
+                        }}
+                      >
+                        <span style={{ minWidth: 0 }}>
+                          <span style={{ fontSize: '13px', fontWeight: 600 }}>
+                            {s.species}
+                            {s.grade ? ` · ${s.grade}` : ''}
+                          </span>
+                          <span
+                            style={{
+                              display: 'block',
+                              fontFamily: "'IBM Plex Mono', monospace",
+                              fontSize: '10px',
+                              color: '#8A99A3',
+                              marginTop: '1px',
+                            }}
+                          >
+                            {s.code}
+                            {auto != null ? ` · auto $${auto.toFixed(2)}` : ' · no base price'}
+                          </span>
+                        </span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          placeholder={auto != null ? auto.toFixed(2) : '0.00'}
+                          value={tierModal.prices[s.code] ?? ''}
+                          onChange={(e) =>
+                            setTierModal((m) =>
+                              m ? { ...m, prices: { ...m.prices, [s.code]: e.target.value } } : m
+                            )
+                          }
+                          style={{
+                            fontFamily: "'IBM Plex Mono', monospace",
+                            fontSize: '13px',
+                            fontWeight: 600,
+                            padding: '7px 9px',
+                            border: '1px solid #D6DCE0',
+                            borderRadius: '5px',
+                            outline: 'none',
+                            textAlign: 'right',
+                            background: '#fff',
+                          }}
+                        />
+                      </div>
+                    );
+                  })}
+              </div>
+              <div style={{ fontSize: '11px', color: '#8A99A3', marginTop: '8px' }}>
+                Each species keeps its own price on this tier. Clear a field to fall back to base ×
+                multiplier.
+              </div>
+            </div>
+
             <div
               style={{
                 display: 'flex',
                 justifyContent: 'flex-end',
                 gap: '10px',
-                marginTop: '22px',
+                marginTop: '18px',
+                flex: 'none',
               }}
             >
               <button

@@ -896,8 +896,10 @@ export type Database = {
       skus: {
         Row: {
           active: boolean;
+          base_price_lb: number | null;
           code: string;
           created_at: string;
+          description: string | null;
           grade: string | null;
           pack_type: string | null;
           qbo_item: string | null;
@@ -906,8 +908,10 @@ export type Database = {
         };
         Insert: {
           active?: boolean;
+          base_price_lb?: number | null;
           code: string;
           created_at?: string;
+          description?: string | null;
           grade?: string | null;
           pack_type?: string | null;
           qbo_item?: string | null;
@@ -916,8 +920,10 @@ export type Database = {
         };
         Update: {
           active?: boolean;
+          base_price_lb?: number | null;
           code?: string;
           created_at?: string;
+          description?: string | null;
           grade?: string | null;
           pack_type?: string | null;
           qbo_item?: string | null;
@@ -925,6 +931,45 @@ export type Database = {
           uom?: string | null;
         };
         Relationships: [];
+      };
+      tier_species_prices: {
+        Row: {
+          id: string;
+          price_lb: number;
+          sku_code: string;
+          tier: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          price_lb: number;
+          sku_code: string;
+          tier: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          price_lb?: number;
+          sku_code?: string;
+          tier?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'tier_species_prices_sku_code_fkey';
+            columns: ['sku_code'];
+            isOneToOne: false;
+            referencedRelation: 'skus';
+            referencedColumns: ['code'];
+          },
+          {
+            foreignKeyName: 'tier_species_prices_tier_fkey';
+            columns: ['tier'];
+            isOneToOne: false;
+            referencedRelation: 'pricing_tiers';
+            referencedColumns: ['tier'];
+          },
+        ];
       };
       standing_orders: {
         Row: {
