@@ -7,9 +7,12 @@ import { createClient } from '@/lib/supabase/client';
 type NavPage =
   | 'board'
   | 'intake'
+  | 'orders'
   | 'inventory'
   | 'customers'
   | 'pickslip'
+  | 'pricesheet'
+  | 'po'
   | 'finance'
   | 'credits'
   | 'vendor'
@@ -33,9 +36,12 @@ export default function Nav() {
   const getActivePage = (): NavPage => {
     if (pathname.includes('/allocation-board')) return 'board';
     if (pathname.includes('/order-intake')) return 'intake';
+    if (pathname.includes('/orders')) return 'orders';
     if (pathname.includes('/inventory')) return 'inventory';
     if (pathname.includes('/customers')) return 'customers';
     if (pathname.includes('/pick-slips')) return 'pickslip';
+    if (pathname.includes('/price-sheet')) return 'pricesheet';
+    if (pathname.includes('/purchase-orders')) return 'po';
     if (pathname.includes('/finance-queue')) return 'finance';
     if (pathname.includes('/credits')) return 'credits';
     if (pathname.includes('/vendor-reconciliation')) return 'vendor';
@@ -186,6 +192,27 @@ export default function Nav() {
           </svg>
           <span>Order Intake</span>
         </Link>
+        <Link href="/mana/orders" style={getLinkStyle('orders')}>
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M4 4h16v16H4z" opacity="0" />
+            <line x1="4" y1="6" x2="14" y2="6" />
+            <line x1="4" y1="12" x2="14" y2="12" />
+            <line x1="4" y1="18" x2="14" y2="18" />
+            <circle cx="19" cy="6" r="1.4" />
+            <circle cx="19" cy="12" r="1.4" />
+            <circle cx="19" cy="18" r="1.4" />
+          </svg>
+          <span>Orders</span>
+        </Link>
         <Link href="/mana/inventory" style={getLinkStyle('inventory')}>
           <svg
             width="18"
@@ -250,6 +277,41 @@ export default function Nav() {
           FINANCE
         </div>
 
+        <Link href="/mana/price-sheet" style={getLinkStyle('pricesheet')}>
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M20.6 13.4l-7.2 7.2a2 2 0 01-2.8 0L3 13V3h10l7.6 7.6a2 2 0 010 2.8z" />
+            <circle cx="7.5" cy="7.5" r="1.5" />
+          </svg>
+          <span>Price Sheet</span>
+        </Link>
+        <Link href="/mana/purchase-orders" style={getLinkStyle('po')}>
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M6 2.5h9l4 4V21.5H6z" />
+            <path d="M15 2.5v4h4" />
+            <line x1="9" y1="12" x2="16" y2="12" />
+            <line x1="9" y1="16" x2="13.5" y2="16" />
+            <line x1="9" y1="8" x2="12" y2="8" />
+          </svg>
+          <span>Purchase Orders</span>
+        </Link>
         <Link href="/mana/finance-queue" style={getLinkStyle('finance')}>
           <svg
             width="18"
