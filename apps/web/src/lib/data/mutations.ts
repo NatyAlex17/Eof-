@@ -1,11 +1,21 @@
 // Write operations — every mutation the UI performs goes through here.
 // Rules: NUMERIC weights round to 1 decimal; allocation is content-level;
 // board locking goes through the lock_board / unlock_board RPCs only.
+//
+// Every exported function carries an explicit return type. This is required, not
+// cosmetic: under pnpm's nested node_modules TypeScript can't name the inferred
+// Supabase response types portably (error TS2742), so we annotate with our own
+// portable row types + PostgrestError (imported from a direct dependency).
 import { createClient } from '../supabase/client';
 import type { Json } from '../database.types';
+import type { PostgrestError } from '@supabase/supabase-js';
+import type { BoxContent, Order, Customer, Lot } from './types';
 
 const supabase = () => createClient();
 const round1 = (n: number) => Math.round(n * 10) / 10;
+
+type MutationError = PostgrestError | { message: string };
+type Result<T> = Promise<{ data: T | null; error: MutationError | null }>;
 
 // ---------------------------------------------------------------------------
 // Allocation ("the dance")
@@ -16,7 +26,10 @@ const round1 = (n: number) => Math.round(n * 10) / 10;
  * The caller is responsible for matching species to the line — the UI enforces
  * it, and RLS restricts writers to admin/operations.
  */
-export async function assignContent(contentId: string, orderLineId: string | null) {
+export async function assignContent(
+  contentId: string,
+  orderLineId: string | null
+): Result<BoxContent> {
   return supabase()
     .from('box_contents')
     .update({ assigned_order_line_id: orderLineId })
@@ -36,7 +49,7 @@ export async function splitContent(
   weightA: number,
   orderLineA: string | null,
   orderLineB: string | null
-) {
+): Result<BoxContent[]> {
   const sb = supabase();
   const wA = round1(Math.min(Math.max(weightA, 0.1), content.weight - 0.1));
   const wB = round1(content.weight - wA);
@@ -75,7 +88,7 @@ export async function splitContent(
 }
 
 /** Merge a split group back into one unassigned portion. */
-export async function mergeSplit(splitGroup: string) {
+export async function mergeSplit(splitGroup: string): Result<BoxContent> {
   const sb = supabase();
   const { data: pieces, error } = await sb
     .from('box_contents')
@@ -109,11 +122,11 @@ export async function mergeSplit(splitGroup: string) {
 // Lock pipeline — RPCs only, never direct table writes
 // ---------------------------------------------------------------------------
 
-export async function lockBoard(location: string) {
+export async function lockBoard(location: string): Result<Json> {
   return supabase().rpc('lock_board', { p_location: location });
 }
 
-export async function unlockBoard(location: string) {
+export async function unlockBoard(location: string): Result<Json> {
   return supabase().rpc('unlock_board', { p_location: location });
 }
 
@@ -137,7 +150,7 @@ export async function createOrder(
     target_weight: number;
     unit_price?: number | null;
   }>
-) {
+): Result<Order> {
   const sb = supabase();
   const { data: created, error } = await sb.from('orders').insert(order).select().single();
   if (error || !created) return { data: null, error };
@@ -154,7 +167,10 @@ export async function createOrder(
 }
 
 /** Create a customer with standard (T2) defaults — the intake "NEW" path. */
-export async function createCustomer(name: string, extras?: { email?: string; phone?: string }) {
+export async function createCustomer(
+  name: string,
+  extras?: { email?: string; phone?: string }
+): Result<Customer> {
   return supabase()
     .from('customers')
     .insert({ name, tier: 'T2', status: 'active', ...extras })
@@ -179,7 +195,7 @@ export async function createLot(
     idx: number;
     contents: Array<{ species: string; grade?: string | null; weight: number }>;
   }>
-) {
+): Result<Lot> {
   const sb = supabase();
   const { data: createdLot, error } = await sb
     .from('lots')
@@ -217,7 +233,12 @@ export async function createLot(
 // Audit — call after any finance/inventory mutation that is not RPC-covered
 // ---------------------------------------------------------------------------
 
-export async function logAudit(action: string, entity: string, entityId: string, after?: Json) {
+export async function logAudit(
+  action: string,
+  entity: string,
+  entityId: string,
+  after?: Json
+): Result<null> {
   return supabase()
     .from('audit_log')
     .insert({ action, entity, entity_id: entityId, after: after ?? null });
