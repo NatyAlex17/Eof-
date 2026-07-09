@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client';
 type NavPage =
   | 'board'
   | 'intake'
+  | 'inbox'
   | 'orders'
   | 'inventory'
   | 'customers'
@@ -35,6 +36,7 @@ export default function Nav() {
   // Determine active page from pathname
   const getActivePage = (): NavPage => {
     if (pathname.includes('/allocation-board')) return 'board';
+    if (pathname.includes('/order-inbox')) return 'inbox';
     if (pathname.includes('/order-intake')) return 'intake';
     if (pathname.includes('/orders')) return 'orders';
     if (pathname.includes('/inventory')) return 'inventory';
@@ -191,6 +193,24 @@ export default function Nav() {
             <line x1="8" y1="12" x2="16" y2="12" />
           </svg>
           <span>Order Intake</span>
+        </Link>
+        <Link href="/mana/order-inbox" style={getLinkStyle('inbox')}>
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M3 5h18v10H3z" opacity="0" />
+            <path d="M3 13h5l1.5 3h5L21 13" />
+            <path d="M3 13V6a2 2 0 012-2h14a2 2 0 012 2v7" />
+            <path d="M3 13v3a2 2 0 002 2h14a2 2 0 002-2v-3" />
+          </svg>
+          <span>Order Inbox</span>
         </Link>
         <Link href="/mana/orders" style={getLinkStyle('orders')}>
           <svg
