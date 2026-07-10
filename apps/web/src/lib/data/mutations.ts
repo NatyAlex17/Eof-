@@ -166,14 +166,21 @@ export async function createOrder(
   return { data: created, error: null };
 }
 
-/** Create a customer with standard (T2) defaults — the intake "NEW" path. */
+/** Create a customer — the intake "NEW" path. Tier defaults to T2 if unset. */
 export async function createCustomer(
   name: string,
-  extras?: { email?: string; phone?: string }
+  extras?: {
+    email?: string;
+    phone?: string;
+    tier?: 'T1' | 'T2' | 'T3';
+    location?: string | null;
+    default_carrier?: string | null;
+  }
 ): Result<Customer> {
+  const { tier = 'T2', ...rest } = extras ?? {};
   return supabase()
     .from('customers')
-    .insert({ name, tier: 'T2', status: 'active', ...extras })
+    .insert({ name, tier, status: 'active', ...rest })
     .select()
     .single();
 }

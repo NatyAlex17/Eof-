@@ -971,6 +971,42 @@ export type Database = {
           },
         ];
       };
+      roles: {
+        Row: {
+          key: string;
+          label: string;
+          description: string | null;
+          color: string;
+          bg: string;
+          sort: number;
+          is_system: boolean;
+          assignable: boolean;
+          created_at: string;
+        };
+        Insert: {
+          key: string;
+          label: string;
+          description?: string | null;
+          color?: string;
+          bg?: string;
+          sort?: number;
+          is_system?: boolean;
+          assignable?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          key?: string;
+          label?: string;
+          description?: string | null;
+          color?: string;
+          bg?: string;
+          sort?: number;
+          is_system?: boolean;
+          assignable?: boolean;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       standing_orders: {
         Row: {
           active: boolean;
@@ -1308,6 +1344,16 @@ export type Database = {
       };
       lock_board: { Args: { p_location: string }; Returns: Json };
       unlock_board: { Args: { p_location: string }; Returns: Json };
+      add_role: {
+        Args: {
+          p_key: string;
+          p_label: string;
+          p_description?: string;
+          p_color?: string;
+          p_bg?: string;
+        };
+        Returns: Database['public']['Tables']['roles']['Row'];
+      };
     };
     Enums: {
       box_part: 'A' | 'B';

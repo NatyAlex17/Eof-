@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Nav from '../components/Nav';
 import DateRangeFilter, { selectionLabel, type DateSelection } from '../components/DateRangeFilter';
+import { fetchOrderFulfillment, fetchOrderLines } from '@/lib/data/queries';
 
 type OrderStatus = 'open' | 'allocated' | 'locked' | 'shipped' | 'invoiced';
 
@@ -24,151 +25,10 @@ interface OrderRow {
   time: string; // entered time, HH:mm
   shipDate: string; // ISO
   carrier: string;
-  location: 'SFO' | 'LAX';
+  location: string;
   status: OrderStatus;
   enteredBy: string;
 }
-
-const SEED: OrderRow[] = [
-  {
-    id: 'o1',
-    code: 'ORD-2213',
-    customer: 'Nobu',
-    tier: 'T1',
-    lines: [
-      { species: 'Ahi Tuna', grade: 'A+', lb: 300, price: 24.5 },
-      { species: 'Ono', grade: 'A', lb: 100, price: 20.9 },
-    ],
-    date: '2026-07-07',
-    time: '07:42',
-    shipDate: '2026-07-08',
-    carrier: 'Air Cargo',
-    location: 'SFO',
-    status: 'open',
-    enteredBy: 'Blake',
-  },
-  {
-    id: 'o2',
-    code: 'ORD-2212',
-    customer: 'Morimoto',
-    tier: 'T1',
-    lines: [{ species: 'Salmon', grade: 'A', lb: 60, price: 15.68 }],
-    date: '2026-07-07',
-    time: '07:15',
-    shipDate: '2026-07-08',
-    carrier: 'Air Cargo',
-    location: 'SFO',
-    status: 'allocated',
-    enteredBy: 'Blanca',
-  },
-  {
-    id: 'o3',
-    code: 'ORD-2211',
-    customer: "Roy's",
-    tier: 'T2',
-    lines: [
-      { species: 'Ono', grade: 'A', lb: 75, price: 17.0 },
-      { species: 'Ahi Tuna', grade: 'A', lb: 20, price: 26.0 },
-    ],
-    date: '2026-07-07',
-    time: '06:58',
-    shipDate: '2026-07-08',
-    carrier: 'Ground',
-    location: 'LAX',
-    status: 'allocated',
-    enteredBy: 'Rob',
-  },
-  {
-    id: 'o4',
-    code: 'ORD-2210',
-    customer: "Alan Wong's",
-    tier: 'T2',
-    lines: [{ species: 'Ahi Tuna', grade: 'A+', lb: 45, price: 28.5 }],
-    date: '2026-07-06',
-    time: '16:20',
-    shipDate: '2026-07-07',
-    carrier: 'Ground',
-    location: 'LAX',
-    status: 'locked',
-    enteredBy: 'Blanca',
-  },
-  {
-    id: 'o5',
-    code: 'ORD-2209',
-    customer: 'Blue Marine',
-    tier: 'T2',
-    lines: [
-      { species: 'Yellowfin Tuna', grade: 'A', lb: 66.4, price: 21.0 },
-      { species: 'Bigeye Tuna', grade: 'A', lb: 72.4, price: 23.0 },
-    ],
-    date: '2026-07-06',
-    time: '09:05',
-    shipDate: '2026-07-07',
-    carrier: 'Trucker — Gold Coast',
-    location: 'LAX',
-    status: 'shipped',
-    enteredBy: 'Blake',
-  },
-  {
-    id: 'o6',
-    code: 'ORD-2208',
-    customer: "Tiki's Grill",
-    tier: 'T3',
-    lines: [{ species: 'Salmon', grade: 'B', lb: 33.5, price: 12.0 }],
-    date: '2026-07-05',
-    time: '14:12',
-    shipDate: '2026-07-06',
-    carrier: 'Customer pickup',
-    location: 'SFO',
-    status: 'shipped',
-    enteredBy: 'Rob',
-  },
-  {
-    id: 'o7',
-    code: 'ORD-2207',
-    customer: 'Morimoto',
-    tier: 'T1',
-    lines: [
-      { species: 'Salmon', grade: 'A', lb: 64.7, price: 15.68 },
-      { species: 'Hamachi', grade: 'A+', lb: 24.0, price: 24.7 },
-    ],
-    date: '2026-07-04',
-    time: '11:30',
-    shipDate: '2026-07-05',
-    carrier: 'Air Cargo',
-    location: 'SFO',
-    status: 'invoiced',
-    enteredBy: 'Blanca',
-  },
-  {
-    id: 'o8',
-    code: 'ORD-2206',
-    customer: 'Nobu',
-    tier: 'T1',
-    lines: [{ species: 'Ahi Tuna', grade: 'A+', lb: 80.7, price: 24.5 }],
-    date: '2026-07-03',
-    time: '15:44',
-    shipDate: '2026-07-04',
-    carrier: 'Air Cargo',
-    location: 'SFO',
-    status: 'invoiced',
-    enteredBy: 'Blanca',
-  },
-  {
-    id: 'o9',
-    code: 'ORD-2201',
-    customer: "Roy's",
-    tier: 'T2',
-    lines: [{ species: 'Ono', grade: 'A', lb: 90, price: 17.0 }],
-    date: '2026-06-29',
-    time: '10:05',
-    shipDate: '2026-06-30',
-    carrier: 'Ground',
-    location: 'LAX',
-    status: 'invoiced',
-    enteredBy: 'Blake',
-  },
-];
 
 const STATUS_META: Record<OrderStatus, { label: string; color: string; bg: string; dot: string }> =
   {
@@ -199,9 +59,11 @@ const GRID_GAP = '14px';
 export default function OrdersPage() {
   const [filter, setFilter] = useState<'all' | OrderStatus>('all');
   const [query, setQuery] = useState('');
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({ o1: true });
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [sel, setSel] = useState<DateSelection | null>(null);
   const [todayIso, setTodayIso] = useState<string>('');
+  const [rows, setRows] = useState<OrderRow[]>([]);
+  const [loading, setLoading] = useState(true);
 
   // today computed on the client to avoid SSR mismatch
   useEffect(() => {
@@ -211,10 +73,77 @@ export default function OrdersPage() {
     );
   }, []);
 
+  // Live orders from Supabase — heads (orders + customer/tier) joined to lines.
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      const [{ data: heads }, { data: lineRows }] = await Promise.all([
+        fetchOrderFulfillment(),
+        fetchOrderLines(),
+      ]);
+
+      const linesByOrder: Record<string, OrderLine[]> = {};
+      (lineRows ?? []).forEach((r) => {
+        const row = r as {
+          order_id: string;
+          species: string;
+          grade: string | null;
+          target_weight: number | null;
+          unit_price: number | null;
+        };
+        (linesByOrder[row.order_id] ??= []).push({
+          species: row.species,
+          grade: row.grade ?? '—',
+          lb: Number(row.target_weight ?? 0),
+          price: Number(row.unit_price ?? 0),
+        });
+      });
+
+      const built: OrderRow[] = (heads ?? []).map((h) => {
+        const head = h as {
+          id: string;
+          code: string;
+          customer: string | null;
+          tier: string | null;
+          ship_date: string | null;
+          carrier: string | null;
+          location: string | null;
+          status: OrderStatus;
+          created_at: string;
+        };
+        const created = new Date(head.created_at);
+        return {
+          id: head.id,
+          code: head.code,
+          customer: head.customer ?? '—',
+          tier: (head.tier as OrderRow['tier']) ?? 'T2',
+          lines: linesByOrder[head.id] ?? [],
+          date: head.created_at.slice(0, 10),
+          time: created.toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+          }),
+          shipDate: head.ship_date ?? head.created_at.slice(0, 10),
+          carrier: head.carrier ?? '—',
+          location: head.location ?? '—',
+          status: head.status,
+          enteredBy: '—',
+        };
+      });
+      // newest first
+      built.sort((a, b) =>
+        a.date < b.date ? 1 : a.date > b.date ? -1 : b.time.localeCompare(a.time)
+      );
+      setRows(built);
+      setLoading(false);
+    })();
+  }, []);
+
   // date-range first (historical view), then status, then search
   const inRange = (o: OrderRow) => !sel || (o.date >= sel.start && o.date <= sel.end);
 
-  const dateFiltered = SEED.filter(inRange);
+  const dateFiltered = rows.filter(inRange);
 
   const filtered = dateFiltered.filter((o) => {
     if (filter !== 'all' && o.status !== filter) return false;
@@ -229,7 +158,7 @@ export default function OrdersPage() {
   });
 
   const rangeLbl = sel ? selectionLabel(sel) : 'Last 7 days';
-  const todayOrders = todayIso ? SEED.filter((o) => o.date === todayIso) : [];
+  const todayOrders = todayIso ? rows.filter((o) => o.date === todayIso) : [];
   const openInRange = dateFiltered.filter((o) => o.status === 'open' || o.status === 'allocated');
   const rangeValue = dateFiltered.reduce((a, o) => a + orderValue(o), 0);
   const doneInRange = dateFiltered.filter((o) => o.status === 'shipped' || o.status === 'invoiced');
@@ -809,7 +738,11 @@ export default function OrdersPage() {
                   color: '#8A99A3',
                 }}
               >
-                No orders in this range. Widen the date filter or clear the search.
+                {loading
+                  ? 'Loading orders…'
+                  : rows.length === 0
+                    ? 'No orders yet. Create one in Order Intake and it appears here.'
+                    : 'No orders in this range. Widen the date filter or clear the search.'}
               </div>
             )}
           </div>

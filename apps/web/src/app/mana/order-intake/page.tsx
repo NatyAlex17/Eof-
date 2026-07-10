@@ -1,63 +1,143 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Nav from '../components/Nav';
+import { fetchCustomers, fetchSkus, fetchPricingTiers } from '@/lib/data/queries';
+import { createCustomer, createOrder } from '@/lib/data/mutations';
 
-interface Customer {
-  tier: 'T1' | 'T2' | 'T3';
+type Tier = 'T1' | 'T2' | 'T3';
+
+interface CustomerRec {
+  id: string;
+  tier: Tier;
   carrier: string;
   terms: string;
+  location: string;
+  overrides: Record<string, number>; // species -> override price
 }
 
+// Warehouses fish ship out of, and the shipment options for an order.
+const WAREHOUSES = ['SFO', 'LAX'];
+const CARRIERS = [
+  'Air Cargo',
+  'Ground',
+  'Main Freight',
+  'Gold Coast 3PL',
+  'Island Air Cargo',
+  'Will Call',
+  'Customer pickup',
+];
+
+interface SkuRec {
+  code: string;
+  species: string;
+  grade: string | null;
+  basePrice: number;
+}
+
+// A line targets a specific SKU (species + grade), not just a species — the
+// same species at two grades is two separate lines (schema fix C2).
 interface LineItem {
   id: number;
-  species: string;
+  code: string;
   qty: number;
 }
 
-// Pricing tiers — single source of truth (mirrors pricing_tiers table)
-const TIERS: Record<Customer['tier'], { label: string; mult: number }> = {
-  T1: { label: 'Tier 1', mult: 0.95 },
-  T2: { label: 'Tier 2', mult: 1.0 },
-  T3: { label: 'Tier 3', mult: 1.08 },
-};
-
-const customers: Record<string, Customer> = {
-  Nobu: { tier: 'T1', carrier: 'Air Cargo', terms: 'Net 15' },
-  Morimoto: { tier: 'T1', carrier: 'Air Cargo', terms: 'Net 15' },
-  "Roy's": { tier: 'T2', carrier: 'Ground', terms: 'Net 30' },
-  "Alan Wong's": { tier: 'T2', carrier: 'Ground', terms: 'Net 30' },
-  "Hy's Steakhouse": { tier: 'T2', carrier: 'Ground', terms: 'Net 30' },
-  "Tiki's Grill": { tier: 'T3', carrier: 'Will Call', terms: 'COD' },
-};
-
-// SKU master — species base price per lb (mirrors skus table)
-const SKUS: Record<string, { code: string; basePrice: number }> = {
-  'Ahi Tuna': { code: 'AHI-A+', basePrice: 28.5 },
-  Ono: { code: 'ONO-A', basePrice: 22.0 },
-  Salmon: { code: 'SAL-A', basePrice: 16.5 },
-  Hamachi: { code: 'HAM-A+', basePrice: 26.0 },
-  Kanpachi: { code: 'KAN-A', basePrice: 24.0 },
-};
-
-// Customer-specific price overrides — beat tier pricing (mirrors price_overrides)
-const PRICE_OVERRIDES: Record<string, Record<string, number>> = {
-  Nobu: { 'Ahi Tuna': 24.5 },
-  "Roy's": { Ono: 17.0 },
-};
+// Board swimlane palette — a created order picks the next colour.
+const ORDER_COLORS = ['#3F6F86', '#3F7D5B', '#B7791F', '#5B6670', '#7B6A91', '#C2453A'];
 
 export default function OrderIntakePage() {
+  const router = useRouter();
+
+  // Live reference data (from Supabase)
+  const [customerMap, setCustomerMap] = useState<Record<string, CustomerRec>>({});
+  const [skuMap, setSkuMap] = useState<Record<string, SkuRec>>({});
+  const [tierMult, setTierMult] = useState<Record<string, { label: string; mult: number }>>({
+    T1: { label: 'Tier 1', mult: 0.95 },
+    T2: { label: 'Tier 2', mult: 1.0 },
+    T3: { label: 'Tier 3', mult: 1.08 },
+  });
+
   const [customerQuery, setCustomerQuery] = useState('');
   const [customer, setCustomer] = useState<string | null>(null);
-  const [lines, setLines] = useState<LineItem[]>([{ id: 1, species: 'Ahi Tuna', qty: 50 }]);
-  const [seq, setSeq] = useState(2);
+  const [selectedTier, setSelectedTier] = useState<Tier>('T2');
+  const [warehouse, setWarehouse] = useState('SFO');
+  const [carrier, setCarrier] = useState('Air Cargo');
+  const [lines, setLines] = useState<LineItem[]>([]);
+  const [seq, setSeq] = useState(1);
   const [shipDate, setShipDate] = useState('');
   const [today, setToday] = useState('');
   const [tomorrow, setTomorrow] = useState('');
   const [created, setCreated] = useState(false);
   const [createdTime, setCreatedTime] = useState<string | null>(null);
+  const [createdCode, setCreatedCode] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [createError, setCreateError] = useState('');
   const [elapsed, setElapsed] = useState(0);
   const [t0, setT0] = useState(Date.now());
+
+  // Load customers, SKUs, and pricing tiers from Supabase on mount.
+  useEffect(() => {
+    (async () => {
+      const [{ data: custs }, { data: skus }, { data: tiers }] = await Promise.all([
+        fetchCustomers(),
+        fetchSkus(),
+        fetchPricingTiers(),
+      ]);
+
+      // Key by SKU code so every grade of a species is orderable (not just the
+      // first). e.g. AHI-A+ and AHI-A are both selectable, each priced on its own.
+      const sMap: Record<string, SkuRec> = {};
+      (skus ?? []).forEach((s) => {
+        if (!s.active) return;
+        sMap[s.code] = {
+          code: s.code,
+          species: s.species,
+          grade: s.grade,
+          basePrice: Number(s.base_price_lb ?? 0),
+        };
+      });
+      setSkuMap(sMap);
+
+      if (tiers && tiers.length > 0) {
+        const tMap: Record<string, { label: string; mult: number }> = {};
+        tiers.forEach((t) => {
+          tMap[t.tier] = { label: t.label, mult: Number(t.base_multiplier) };
+        });
+        setTierMult(tMap);
+      }
+
+      // fetchCustomers selects nested price_overrides; the return type is the base
+      // row, so read the join through this local shape.
+      type CustRow = {
+        id: string;
+        name: string;
+        tier: string | null;
+        default_carrier: string | null;
+        terms: string | null;
+        location: string | null;
+        price_overrides?: { species: string | null; sku: string; price: number }[];
+      };
+      const cMap: Record<string, CustomerRec> = {};
+      ((custs ?? []) as unknown as CustRow[]).forEach((c) => {
+        // Overrides are keyed by SKU code (species + grade), matching a line.
+        const overrides: Record<string, number> = {};
+        (c.price_overrides ?? []).forEach((o) => {
+          if (o.sku) overrides[o.sku] = Number(o.price);
+        });
+        cMap[c.name] = {
+          id: c.id,
+          tier: (c.tier as Tier) ?? 'T2',
+          carrier: c.default_carrier ?? '—',
+          terms: c.terms ?? '—',
+          location: c.location ?? 'SFO',
+          overrides,
+        };
+      });
+      setCustomerMap(cMap);
+    })();
+  }, []);
 
   useEffect(() => {
     const iv = setInterval(() => {
@@ -82,22 +162,32 @@ export default function OrderIntakePage() {
 
   const onCustomerInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const q = e.target.value;
-    const exact = Object.keys(customers).find((n) => n.toLowerCase() === q.toLowerCase());
+    const exact = Object.keys(customerMap).find((n) => n.toLowerCase() === q.toLowerCase());
     setCustomerQuery(q);
-    setCustomer(exact || (customer && q === customer ? customer : null));
+    const resolved = exact || (customer && q === customer ? customer : null);
+    setCustomer(resolved);
+    // Existing customer -> snap tier/warehouse/carrier to theirs; new name -> keep choices.
+    if (resolved && customerMap[resolved]) applyCustomerDefaults(customerMap[resolved]);
+  };
+
+  const applyCustomerDefaults = (rec: CustomerRec) => {
+    setSelectedTier(rec.tier);
+    if (rec.location && WAREHOUSES.includes(rec.location)) setWarehouse(rec.location);
+    if (rec.carrier && rec.carrier !== '—') setCarrier(rec.carrier);
   };
 
   const pickCustomer = (name: string) => {
     setCustomer(name);
     setCustomerQuery(name);
+    if (customerMap[name]) applyCustomerDefaults(customerMap[name]);
   };
 
-  // --- Multi-species line handling ---
-  const toggleSpecies = (s: string) => {
+  // --- Multi-line handling (one line per SKU = species + grade) ---
+  const toggleSku = (code: string) => {
     setLines((prev) => {
-      const exists = prev.find((l) => l.species === s);
-      if (exists) return prev.filter((l) => l.species !== s);
-      const next = [...prev, { id: seq, species: s, qty: 50 }];
+      const exists = prev.find((l) => l.code === code);
+      if (exists) return prev.filter((l) => l.code !== code);
+      const next = [...prev, { id: seq, code, qty: 50 }];
       setSeq((n) => n + 1);
       return next;
     });
@@ -119,10 +209,14 @@ export default function OrderIntakePage() {
     setT0(Date.now());
     setCustomerQuery('');
     setCustomer(null);
-    setLines([{ id: seq, species: 'Ahi Tuna', qty: 50 }]);
-    setSeq((n) => n + 1);
+    setSelectedTier('T2');
+    setWarehouse('SFO');
+    setCarrier('Air Cargo');
+    setLines([]);
     setShipDate(today);
     setCreated(false);
+    setCreatedCode(null);
+    setCreateError('');
     setElapsed(0);
   };
 
@@ -146,37 +240,114 @@ export default function OrderIntakePage() {
   const hasLines = lines.length > 0 && lines.some((l) => l.qty > 0);
   const canCreate = hasSelection && hasLines;
   const customerName = customer || typedName;
-  const cust = customer ? customers[customer] : null;
+  const cust = customer ? (customerMap[customer] ?? null) : null;
   const hasCustomer = !!cust;
-  const tierMeta = cust ? TIERS[cust.tier] : TIERS.T2; // new customers = standard tier
+  // The order's tier is chosen in the UI (defaults to the customer's tier).
+  const tierMeta = tierMult[selectedTier] ?? tierMult.T2;
   const mult = tierMeta.mult;
 
-  // Priced lines: customer override wins, else SKU base × tier multiplier
+  // Priced lines: customer override (by SKU) wins, else SKU base × tier multiplier
   const pricedLines = lines.map((l) => {
-    const sku = SKUS[l.species];
+    const sku = skuMap[l.code];
     const base = sku?.basePrice || 0;
-    const override = customer ? PRICE_OVERRIDES[customer]?.[l.species] : undefined;
+    const override = cust ? cust.overrides[l.code] : undefined;
     const price = override ?? base * mult;
     return {
       ...l,
+      species: sku?.species ?? '—',
+      grade: sku?.grade ?? null,
       price,
       subtotal: price * l.qty,
-      skuCode: sku?.code || '—',
+      skuCode: l.code,
       hasOverride: override !== undefined,
     };
   });
   const grandTotal = pricedLines.reduce((a, l) => a + l.subtotal, 0);
   const totalLb = lines.reduce((a, l) => a + l.qty, 0);
 
-  const createOrder = () => {
-    if (!canCreate) return;
+  // Persist the order to Supabase, then it appears on the Allocation Board.
+  const handleCreateOrder = async () => {
+    if (!canCreate || saving) return;
+    setSaving(true);
+    setCreateError('');
+
+    // Resolve (or create) the customer — new ones take the chosen tier,
+    // warehouse (location), and shipment carrier.
+    let customerId = cust?.id ?? null;
+    if (!customerId) {
+      const { data: newCust, error: custErr } = await createCustomer(customerName.trim(), {
+        tier: selectedTier,
+        location: warehouse,
+        default_carrier: carrier,
+      });
+      if (custErr || !newCust) {
+        setSaving(false);
+        setCreateError(custErr?.message || 'Could not create the customer.');
+        return;
+      }
+      customerId = newCust.id;
+      // reflect the new customer locally so its defaults show immediately
+      setCustomerMap((m) => ({
+        ...m,
+        [customerName.trim()]: {
+          id: newCust.id,
+          tier: selectedTier,
+          carrier,
+          terms: '—',
+          location: warehouse,
+          overrides: {},
+        },
+      }));
+    }
+
+    // Generate a short, unique order code from the customer name.
+    const initials =
+      customerName
+        .replace(/[^a-zA-Z0-9 ]/g, '')
+        .trim()
+        .split(/\s+/)
+        .map((w) => w[0])
+        .join('')
+        .toUpperCase()
+        .slice(0, 4) || 'ORD';
+    const code = `${initials}-${Date.now().toString(36).slice(-5).toUpperCase()}`;
+
+    const colorIdx = Object.keys(customerMap).indexOf(customerName);
+    const color = ORDER_COLORS[(colorIdx >= 0 ? colorIdx : lines.length) % ORDER_COLORS.length];
+
+    const { error: orderErr } = await createOrder(
+      {
+        customer_id: customerId,
+        code,
+        carrier: carrier || null,
+        ship_date: shipDate || null,
+        location: warehouse,
+        color,
+      },
+      pricedLines
+        .filter((l) => l.qty > 0)
+        .map((l) => ({
+          species: l.species,
+          grade: l.grade,
+          target_weight: l.qty,
+          unit_price: Math.round(l.price * 100) / 100,
+        }))
+    );
+
+    setSaving(false);
+    if (orderErr) {
+      setCreateError(orderErr.message || 'Could not create the order.');
+      return;
+    }
+
     const mm = Math.floor(elapsed / 60);
     const ss = elapsed % 60;
-    setCreated(true);
     setCreatedTime(`${mm}:${String(ss).padStart(2, '0')}`);
+    setCreatedCode(code);
+    setCreated(true);
   };
 
-  const customerChips = Object.keys(customers)
+  const customerChips = Object.keys(customerMap)
     .slice(0, 5)
     .map((n) => ({
       name: n,
@@ -481,9 +652,176 @@ export default function OrderIntakePage() {
                     NEW
                   </span>
                   <span style={{ fontSize: '13px', color: '#8A5A14', lineHeight: 1.4 }}>
-                    New customer — will be created with standard pricing. Set their tier &amp;
-                    defaults later in Customers.
+                    New customer — will be created on this order with the tier you pick below. Add
+                    their carrier &amp; terms later in Customers.
                   </span>
+                </div>
+              )}
+
+              {/* pricing tier — sets this order's pricing (and a new customer's tier) */}
+              {hasSelection && (
+                <div>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      marginBottom: '9px',
+                    }}
+                  >
+                    <label
+                      style={{
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        letterSpacing: '0.06em',
+                        color: '#5A6670',
+                      }}
+                    >
+                      PRICING TIER
+                    </label>
+                    <span style={{ fontSize: '11px', color: '#8A99A3' }}>
+                      {isNewCustomer
+                        ? 'sets the new customer’s tier'
+                        : 'defaults to this customer’s tier'}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '9px' }}>
+                    {(['T1', 'T2', 'T3'] as Tier[]).map((t) => {
+                      const on = selectedTier === t;
+                      const meta = tierMult[t];
+                      return (
+                        <button
+                          key={t}
+                          onClick={() => setSelectedTier(t)}
+                          style={{
+                            flex: 1,
+                            textAlign: 'left',
+                            borderRadius: '6px',
+                            padding: '11px 14px',
+                            cursor: 'pointer',
+                            fontFamily: "'Archivo', sans-serif",
+                            border: on ? '1.5px solid #3F6F86' : '1.5px solid #D6DCE0',
+                            background: on ? '#EEF3F6' : '#fff',
+                            color: on ? '#2D5365' : '#5A6670',
+                          }}
+                        >
+                          <div style={{ fontSize: '14px', fontWeight: 700 }}>
+                            {meta?.label ?? t}
+                          </div>
+                          <div
+                            style={{
+                              fontFamily: "'IBM Plex Mono', monospace",
+                              fontSize: '11px',
+                              color: on ? '#3F6F86' : '#8A99A3',
+                              marginTop: '2px',
+                            }}
+                          >
+                            {(meta?.mult ?? 1).toFixed(2)}×
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* warehouse + shipment — where it ships from and how it goes */}
+              {hasSelection && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                  <div>
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        marginBottom: '9px',
+                      }}
+                    >
+                      <label
+                        style={{
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          letterSpacing: '0.06em',
+                          color: '#5A6670',
+                        }}
+                      >
+                        WAREHOUSE
+                      </label>
+                      <span style={{ fontSize: '11px', color: '#8A99A3' }}>ships from</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: '9px' }}>
+                      {WAREHOUSES.map((w) => {
+                        const on = warehouse === w;
+                        return (
+                          <button
+                            key={w}
+                            onClick={() => setWarehouse(w)}
+                            style={{
+                              flex: 1,
+                              borderRadius: '6px',
+                              padding: '11px 14px',
+                              cursor: 'pointer',
+                              fontFamily: "'Archivo', sans-serif",
+                              fontSize: '14px',
+                              fontWeight: 700,
+                              border: on ? '1.5px solid #3F6F86' : '1.5px solid #D6DCE0',
+                              background: on ? '#EEF3F6' : '#fff',
+                              color: on ? '#2D5365' : '#5A6670',
+                            }}
+                          >
+                            {w}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div>
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        marginBottom: '9px',
+                      }}
+                    >
+                      <label
+                        style={{
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          letterSpacing: '0.06em',
+                          color: '#5A6670',
+                        }}
+                      >
+                        SHIPMENT
+                      </label>
+                      <span style={{ fontSize: '11px', color: '#8A99A3' }}>carrier / method</span>
+                    </div>
+                    <select
+                      value={carrier}
+                      onChange={(e) => setCarrier(e.target.value)}
+                      style={{
+                        width: '100%',
+                        boxSizing: 'border-box',
+                        fontFamily: "'Archivo', sans-serif",
+                        fontSize: '14px',
+                        fontWeight: 500,
+                        padding: '12px 14px',
+                        border: '1.5px solid #C2CAD0',
+                        borderRadius: '6px',
+                        outline: 'none',
+                        background: '#fff',
+                        color: '#222A30',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {/* include the customer's saved carrier even if it's not in the standard list */}
+                      {(CARRIERS.includes(carrier) ? CARRIERS : [carrier, ...CARRIERS]).map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               )}
 
@@ -505,19 +843,19 @@ export default function OrderIntakePage() {
                       color: '#5A6670',
                     }}
                   >
-                    SPECIES
+                    SPECIES &amp; GRADE
                   </label>
                   <span style={{ fontSize: '11px', color: '#8A99A3' }}>
-                    Tap to add · one order, multiple species
+                    Tap to add · same species at two grades = two lines
                   </span>
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '9px' }}>
-                  {Object.keys(SKUS).map((s) => {
-                    const on = lines.some((l) => l.species === s);
+                  {Object.values(skuMap).map((sku) => {
+                    const on = lines.some((l) => l.code === sku.code);
                     return (
                       <button
-                        key={s}
-                        onClick={() => toggleSpecies(s)}
+                        key={sku.code}
+                        onClick={() => toggleSku(sku.code)}
                         style={{
                           display: 'flex',
                           alignItems: 'center',
@@ -551,7 +889,23 @@ export default function OrderIntakePage() {
                         >
                           {on ? '✓' : '+'}
                         </span>
-                        {s}
+                        {sku.species}
+                        {sku.grade && (
+                          <span
+                            style={{
+                              fontFamily: "'IBM Plex Mono', monospace",
+                              fontSize: '10px',
+                              fontWeight: 700,
+                              color: on ? '#3F6F86' : '#8A99A3',
+                              background: on ? '#fff' : '#F4F5F6',
+                              border: `1px solid ${on ? '#BBD0DB' : '#E2E6E9'}`,
+                              borderRadius: '3px',
+                              padding: '1px 5px',
+                            }}
+                          >
+                            {sku.grade}
+                          </span>
+                        )}
                       </button>
                     );
                   })}
@@ -584,7 +938,7 @@ export default function OrderIntakePage() {
                       background: '#fff',
                     }}
                   >
-                    Tap a species above to add it to this order.
+                    Tap a species &amp; grade above to add it to this order.
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -604,6 +958,21 @@ export default function OrderIntakePage() {
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
                             <span style={{ fontSize: '15px', fontWeight: 700 }}>{l.species}</span>
+                            {l.grade && (
+                              <span
+                                style={{
+                                  fontSize: '10px',
+                                  fontWeight: 700,
+                                  color: '#2D5365',
+                                  background: '#EEF3F6',
+                                  border: '1px solid #BBD0DB',
+                                  borderRadius: '2px',
+                                  padding: '1px 6px',
+                                }}
+                              >
+                                {l.grade}
+                              </span>
+                            )}
                             <span
                               style={{
                                 fontFamily: "'IBM Plex Mono', monospace",
@@ -751,8 +1120,7 @@ export default function OrderIntakePage() {
                       }}
                     >
                       <span style={{ fontSize: '12px', fontWeight: 600, color: '#5A6670' }}>
-                        {lines.length} {lines.length === 1 ? 'species' : 'species'} · {totalLb} lb
-                        total
+                        {lines.length} {lines.length === 1 ? 'line' : 'lines'} · {totalLb} lb total
                       </span>
                       <span
                         style={{
@@ -881,7 +1249,7 @@ export default function OrderIntakePage() {
                       color: '#8A99A3',
                     }}
                   >
-                    #2213
+                    {createdCode || 'NEW'}
                   </span>
                 </div>
                 <div style={{ padding: '18px' }}>
@@ -936,7 +1304,10 @@ export default function OrderIntakePage() {
                           }}
                         >
                           <div>
-                            <div style={{ fontSize: '14px', fontWeight: 600 }}>{l.species}</div>
+                            <div style={{ fontSize: '14px', fontWeight: 600 }}>
+                              {l.species}
+                              {l.grade ? ` · ${l.grade}` : ''}
+                            </div>
                             <div
                               style={{
                                 fontFamily: "'IBM Plex Mono', monospace",
@@ -984,10 +1355,20 @@ export default function OrderIntakePage() {
                         paddingBottom: '11px',
                       }}
                     >
-                      <span style={{ fontSize: '13px', color: '#5A6670' }}>Carrier</span>
-                      <span style={{ fontSize: '14px', fontWeight: 600 }}>
-                        {cust?.carrier || '—'}
-                      </span>
+                      <span style={{ fontSize: '13px', color: '#5A6670' }}>Warehouse</span>
+                      <span style={{ fontSize: '14px', fontWeight: 600 }}>{warehouse}</span>
+                    </div>
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'baseline',
+                        borderBottom: '1px solid #EDEFF1',
+                        paddingBottom: '11px',
+                      }}
+                    >
+                      <span style={{ fontSize: '13px', color: '#5A6670' }}>Shipment</span>
+                      <span style={{ fontSize: '14px', fontWeight: 600 }}>{carrier || '—'}</span>
                     </div>
                     <div
                       style={{
@@ -1020,7 +1401,8 @@ export default function OrderIntakePage() {
                   }}
                 >
                   <button
-                    onClick={createOrder}
+                    onClick={handleCreateOrder}
+                    disabled={!canCreate || saving || created}
                     style={{
                       fontFamily: "'Archivo', sans-serif",
                       fontSize: '15px',
@@ -1028,17 +1410,21 @@ export default function OrderIntakePage() {
                       border: 'none',
                       borderRadius: '6px',
                       padding: '14px',
-                      cursor: canCreate ? 'pointer' : 'default',
-                      ...(canCreate
+                      cursor: canCreate && !saving && !created ? 'pointer' : 'default',
+                      ...(canCreate && !created
                         ? { background: '#222A30', color: '#fff' }
                         : { background: '#E2E6E9', color: '#A6AEB4' }),
                     }}
                   >
-                    {!hasSelection
-                      ? 'Enter a customer name'
-                      : !hasLines
-                        ? 'Add at least one species'
-                        : 'Create order →'}
+                    {created
+                      ? '✓ Order created'
+                      : saving
+                        ? 'Creating…'
+                        : !hasSelection
+                          ? 'Enter a customer name'
+                          : !hasLines
+                            ? 'Add at least one species'
+                            : 'Create order →'}
                   </button>
                   <button
                     onClick={reset}
@@ -1054,44 +1440,78 @@ export default function OrderIntakePage() {
                       cursor: 'pointer',
                     }}
                   >
-                    Save &amp; start new
+                    Start new order
                   </button>
                 </div>
               </div>
+
+              {createError && (
+                <div
+                  style={{
+                    marginTop: '12px',
+                    background: '#FBF0EF',
+                    border: '1px solid #E3B6B1',
+                    borderRadius: '6px',
+                    padding: '12px 14px',
+                    fontSize: '13px',
+                    color: '#A5362C',
+                  }}
+                >
+                  {createError}
+                </div>
+              )}
 
               {created && (
                 <div
                   style={{
                     marginTop: '12px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '9px',
                     background: '#EAF1ED',
                     border: '1px solid #BFD8C9',
                     borderRadius: '6px',
                     padding: '12px 14px',
                   }}
                 >
-                  <span
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
+                    <span
+                      style={{
+                        width: '18px',
+                        height: '18px',
+                        borderRadius: '50%',
+                        background: '#3F7D5B',
+                        color: '#fff',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flex: 'none',
+                      }}
+                    >
+                      ✓
+                    </span>
+                    <span style={{ fontSize: '13px', fontWeight: 500, color: '#2E6347' }}>
+                      Order {createdCode} created in {createdTime} — {lines.length}-line order is on
+                      the board.
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => router.push('/mana/allocation-board')}
                     style={{
-                      width: '18px',
-                      height: '18px',
-                      borderRadius: '50%',
-                      background: '#3F7D5B',
-                      color: '#fff',
-                      fontSize: '11px',
-                      fontWeight: 700,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
+                      marginTop: '10px',
+                      width: '100%',
+                      fontFamily: "'Archivo', sans-serif",
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      background: '#fff',
+                      color: '#2E6347',
+                      border: '1px solid #BFD8C9',
+                      borderRadius: '6px',
+                      padding: '10px',
+                      cursor: 'pointer',
                     }}
                   >
-                    ✓
-                  </span>
-                  <span style={{ fontSize: '13px', fontWeight: 500, color: '#2E6347' }}>
-                    Order #2213 created in {createdTime} — {lines.length}-species order sent to the
-                    board.
-                  </span>
+                    View on Allocation Board →
+                  </button>
                 </div>
               )}
             </div>

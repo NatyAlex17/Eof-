@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Nav from '../components/Nav';
 import ConfirmLockModal from '../components/ConfirmLockModal';
 import LockedBoardBanner from '../components/LockedBoardBanner';
 import SplitBoxModal from '../components/SplitBoxModal';
+import { fetchOrderFulfillment, fetchOrderLines } from '@/lib/data/queries';
 
 interface OrderLine {
   species: string;
@@ -57,11 +58,23 @@ const colors = {
 };
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
+const ORDER_PALETTE = [
+  colors.steel,
+  colors.sage,
+  colors.amber,
+  colors.slate,
+  colors.violet,
+  colors.verm,
+];
+const tierLabel = (t: string | null) =>
+  t === 'T1' ? 'Tier 1' : t === 'T2' ? 'Tier 2' : t === 'T3' ? 'Tier 3' : t || '—';
 
 export default function AllocationBoardPage() {
   const router = useRouter();
   const [location, setLocation] = useState<'SFO' | 'LAX'>('SFO');
-  const [selectedOrderId, setSelectedOrderId] = useState<string | null>('o1');
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(true);
   const [splitTarget, setSplitTarget] = useState<{
     lotId: string;
     boxId: string;
@@ -78,51 +91,58 @@ export default function AllocationBoardPage() {
   );
   const [dragOverOrderId, setDragOverOrderId] = useState<string | null>(null);
 
-  // Orders now carry multiple species lines, each with its own target.
-  const orders: Order[] = [
-    {
-      id: 'o1',
-      customer: 'Nobu',
-      code: 'NOBU',
-      tier: 'Tier 1',
-      carrier: 'Air Cargo',
-      color: colors.steel,
-      lines: [
-        { species: 'Ahi Tuna', target: 90 },
-        { species: 'Ono', target: 30 },
-      ],
-    },
-    {
-      id: 'o2',
-      customer: 'Morimoto',
-      code: 'MORI',
-      tier: 'Tier 1',
-      carrier: 'Air Cargo',
-      color: colors.sage,
-      lines: [{ species: 'Salmon', target: 60 }],
-    },
-    {
-      id: 'o3',
-      customer: "Roy's",
-      code: 'ROY',
-      tier: 'Tier 2',
-      carrier: 'Ground',
-      color: colors.amber,
-      lines: [
-        { species: 'Ono', target: 75 },
-        { species: 'Ahi Tuna', target: 20 },
-      ],
-    },
-    {
-      id: 'o4',
-      customer: "Alan Wong's",
-      code: 'WONG',
-      tier: 'Tier 2',
-      carrier: 'Ground',
-      color: colors.slate,
-      lines: [{ species: 'Ahi Tuna', target: 45 }],
-    },
-  ];
+  // Orders load live from Supabase (created in Order Intake / Order Inbox).
+  // Each order carries multiple species lines, each with its own target.
+  useEffect(() => {
+    (async () => {
+      setOrdersLoading(true);
+      const [{ data: heads }, { data: lineRows }] = await Promise.all([
+        fetchOrderFulfillment(location),
+        fetchOrderLines(),
+      ]);
+
+      // group lines by order_id
+      const linesByOrder: Record<string, OrderLine[]> = {};
+      (lineRows ?? []).forEach((r) => {
+        const row = r as { order_id: string; species: string; target_weight: number | null };
+        (linesByOrder[row.order_id] ??= []).push({
+          species: row.species,
+          target: Number(row.target_weight ?? 0),
+        });
+      });
+
+      const built: Order[] = (heads ?? [])
+        .map((h) => {
+          const head = h as {
+            id: string;
+            customer: string | null;
+            code: string;
+            tier: string | null;
+            carrier: string | null;
+            color: string | null;
+            status: string;
+          };
+          return { head, lines: linesByOrder[head.id] ?? [] };
+        })
+        // only orders still being allocated — hide shipped/invoiced
+        .filter(({ head }) => head.status !== 'shipped' && head.status !== 'invoiced')
+        .map(({ head }, i) => ({
+          id: head.id,
+          customer: head.customer ?? '—',
+          code: head.code,
+          tier: tierLabel(head.tier),
+          carrier: head.carrier ?? '—',
+          color: head.color || ORDER_PALETTE[i % ORDER_PALETTE.length],
+          lines: linesByOrder[head.id] ?? [],
+        }));
+
+      setOrders(built);
+      setSelectedOrderId((prev) =>
+        built.some((o) => o.id === prev) ? prev : (built[0]?.id ?? null)
+      );
+      setOrdersLoading(false);
+    })();
+  }, [location]);
 
   // Lots contain boxes; boxes contain mixed-species contents.
   const [lots, setLots] = useState<Lot[]>([
@@ -136,7 +156,7 @@ export default function AllocationBoardPage() {
           n: 'B-4471',
           idx: 1,
           contents: [
-            { id: 'b1c1', species: 'Ahi Tuna', grade: 'A+', weight: 42.6, assignedTo: 'o1' },
+            { id: 'b1c1', species: 'Ahi Tuna', grade: 'A+', weight: 42.6, assignedTo: null },
           ],
         },
         {
@@ -144,7 +164,7 @@ export default function AllocationBoardPage() {
           n: 'B-4472',
           idx: 2,
           contents: [
-            { id: 'b2c1', species: 'Ahi Tuna', grade: 'A+', weight: 38.1, assignedTo: 'o1' },
+            { id: 'b2c1', species: 'Ahi Tuna', grade: 'A+', weight: 38.1, assignedTo: null },
             { id: 'b2c2', species: 'Ono', grade: 'A', weight: 6.0, assignedTo: null },
           ],
         },
@@ -184,7 +204,7 @@ export default function AllocationBoardPage() {
           id: 'b7',
           n: 'B-4520',
           idx: 1,
-          contents: [{ id: 'b7c1', species: 'Salmon', grade: 'A', weight: 31.2, assignedTo: 'o2' }],
+          contents: [{ id: 'b7c1', species: 'Salmon', grade: 'A', weight: 31.2, assignedTo: null }],
         },
         {
           id: 'b8',
@@ -627,6 +647,29 @@ export default function AllocationBoardPage() {
                 background: '#F4F5F6',
               }}
             >
+              {ordersLoading && (
+                <div style={{ padding: '18px 4px', fontSize: '13px', color: '#8A99A3' }}>
+                  Loading orders…
+                </div>
+              )}
+              {!ordersLoading && orders.length === 0 && (
+                <div
+                  style={{
+                    border: '1.5px dashed #D6DCE0',
+                    borderRadius: '8px',
+                    padding: '22px 16px',
+                    textAlign: 'center',
+                    fontSize: '13px',
+                    color: '#8A99A3',
+                    background: '#fff',
+                    lineHeight: 1.5,
+                  }}
+                >
+                  No open orders in {location}.
+                  <br />
+                  Create one in <strong>Order Intake</strong> and it appears here.
+                </div>
+              )}
               {orders.map((o) => {
                 const selected = selectedOrderId === o.id;
                 const full = orderIsFull(o);

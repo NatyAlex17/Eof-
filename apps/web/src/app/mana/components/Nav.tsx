@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 
@@ -21,11 +22,39 @@ type NavPage =
   | 'findash'
   | 'dashboard'
   | 'notifications'
+  | 'settings'
   | 'admin';
+
+interface NavUser {
+  name: string;
+  role: string;
+  location: string | null;
+}
 
 export default function Nav() {
   const pathname = usePathname();
   const router = useRouter();
+  const [me, setMe] = useState<NavUser | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('name, role, location')
+        .eq('id', user.id)
+        .single();
+      setMe({
+        name: profile?.name || (user.user_metadata?.name as string) || user.email || 'User',
+        role: profile?.role || 'viewer',
+        location: profile?.location ?? null,
+      });
+    })();
+  }, []);
 
   const signOut = async () => {
     const supabase = createClient();
@@ -51,6 +80,7 @@ export default function Nav() {
     if (pathname.includes('/finance-dashboard')) return 'findash';
     if (pathname.includes('/ceo-dashboard')) return 'dashboard';
     if (pathname.includes('/notifications')) return 'notifications';
+    if (pathname.includes('/settings')) return 'settings';
     if (pathname.includes('/admin')) return 'admin';
     return 'board';
   };
@@ -480,6 +510,22 @@ export default function Nav() {
           </svg>
           <span>Notifications</span>
         </Link>
+        <Link href="/mana/settings" style={getLinkStyle('settings')}>
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
+          </svg>
+          <span>Settings</span>
+        </Link>
         <Link href="/mana/admin" style={getLinkStyle('admin')}>
           <svg
             width="18"
@@ -526,11 +572,39 @@ export default function Nav() {
             flex: 'none',
           }}
         >
-          BK
+          {me
+            ? me.name
+                .split(' ')
+                .map((p) => p[0])
+                .filter(Boolean)
+                .slice(0, 2)
+                .join('')
+                .toUpperCase() || '?'
+            : '·'}
         </span>
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: '13px', fontWeight: 600, lineHeight: 1.1 }}>Blake</div>
-          <div style={{ fontSize: '11px', color: '#8A99A3', marginTop: '2px' }}>Owner · SFO</div>
+          <div
+            style={{
+              fontSize: '13px',
+              fontWeight: 600,
+              lineHeight: 1.1,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {me ? me.name : 'Loading…'}
+          </div>
+          <div
+            style={{
+              fontSize: '11px',
+              color: '#8A99A3',
+              marginTop: '2px',
+              textTransform: 'capitalize',
+            }}
+          >
+            {me ? `${me.role}${me.location ? ` · ${me.location}` : ''}` : ''}
+          </div>
         </div>
       </div>
 
