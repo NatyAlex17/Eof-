@@ -278,6 +278,7 @@ export type Database = {
       };
       customers: {
         Row: {
+          address: string | null;
           channel_pref: string | null;
           contact: string | null;
           created_at: string;
@@ -291,9 +292,10 @@ export type Database = {
           standing_order: string | null;
           status: Database['public']['Enums']['customer_status'];
           terms: string | null;
-          tier: Database['public']['Enums']['customer_tier'];
+          tier: Database['public']['Enums']['customer_tier'] | null;
         };
         Insert: {
+          address?: string | null;
           channel_pref?: string | null;
           contact?: string | null;
           created_at?: string;
@@ -307,9 +309,10 @@ export type Database = {
           standing_order?: string | null;
           status?: Database['public']['Enums']['customer_status'];
           terms?: string | null;
-          tier?: Database['public']['Enums']['customer_tier'];
+          tier?: Database['public']['Enums']['customer_tier'] | null;
         };
         Update: {
+          address?: string | null;
           channel_pref?: string | null;
           contact?: string | null;
           created_at?: string;
@@ -323,7 +326,7 @@ export type Database = {
           standing_order?: string | null;
           status?: Database['public']['Enums']['customer_status'];
           terms?: string | null;
-          tier?: Database['public']['Enums']['customer_tier'];
+          tier?: Database['public']['Enums']['customer_tier'] | null;
         };
         Relationships: [];
       };
@@ -659,33 +662,48 @@ export type Database = {
           carrier: string | null;
           code: string;
           color: string | null;
+          contact_name: string | null;
+          contact_phone: string | null;
           created_at: string;
           customer_id: string;
+          delivery_address: string | null;
+          freight_mode: string | null;
           id: string;
           location: string | null;
           ship_date: string | null;
+          source: string;
           status: Database['public']['Enums']['order_status'];
         };
         Insert: {
           carrier?: string | null;
           code: string;
           color?: string | null;
+          contact_name?: string | null;
+          contact_phone?: string | null;
           created_at?: string;
           customer_id: string;
+          delivery_address?: string | null;
+          freight_mode?: string | null;
           id?: string;
           location?: string | null;
           ship_date?: string | null;
+          source?: string;
           status?: Database['public']['Enums']['order_status'];
         };
         Update: {
           carrier?: string | null;
           code?: string;
           color?: string | null;
+          contact_name?: string | null;
+          contact_phone?: string | null;
           created_at?: string;
           customer_id?: string;
+          delivery_address?: string | null;
+          freight_mode?: string | null;
           id?: string;
           location?: string | null;
           ship_date?: string | null;
+          source?: string;
           status?: Database['public']['Enums']['order_status'];
         };
         Relationships: [
@@ -812,6 +830,7 @@ export type Database = {
       profiles: {
         Row: {
           created_at: string;
+          customer_id: string | null;
           email: string;
           id: string;
           last_seen: string | null;
@@ -822,6 +841,7 @@ export type Database = {
         };
         Insert: {
           created_at?: string;
+          customer_id?: string | null;
           email: string;
           id: string;
           last_seen?: string | null;
@@ -832,6 +852,7 @@ export type Database = {
         };
         Update: {
           created_at?: string;
+          customer_id?: string | null;
           email?: string;
           id?: string;
           last_seen?: string | null;
@@ -1342,6 +1363,7 @@ export type Database = {
         Args: never;
         Returns: Database['public']['Enums']['user_role'];
       };
+      app_customer_id: { Args: never; Returns: string | null };
       lock_board: { Args: { p_location: string }; Returns: Json };
       unlock_board: { Args: { p_location: string }; Returns: Json };
       add_role: {
@@ -1368,7 +1390,7 @@ export type Database = {
       order_status: 'open' | 'allocated' | 'locked' | 'shipped' | 'invoiced';
       parse_status: 'pending' | 'parsed' | 'needs_review' | 'posted';
       statement_status: 'draft' | 'sent' | 'countered' | 'settled';
-      user_role: 'admin' | 'operations' | 'finance' | 'sales' | 'logistics' | 'viewer';
+      user_role: 'admin' | 'operations' | 'finance' | 'sales' | 'logistics' | 'viewer' | 'customer';
       user_status: 'active' | 'invited' | 'inactive';
     };
     CompositeTypes: {

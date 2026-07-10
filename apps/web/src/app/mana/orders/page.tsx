@@ -5,8 +5,17 @@ import Link from 'next/link';
 import Nav from '../components/Nav';
 import DateRangeFilter, { selectionLabel, type DateSelection } from '../components/DateRangeFilter';
 import { fetchOrderFulfillment, fetchOrderLines } from '@/lib/data/queries';
+import { createClient } from '@/lib/supabase/client';
 
 type OrderStatus = 'open' | 'allocated' | 'locked' | 'shipped' | 'invoiced';
+
+// Warehouses feed the allocation board; direct-shipment origins (ORD/HNL) bypass
+// the warehouse entirely (per the schema-audit docs: LAX/SFO -> warehouse,
+// ORD/HNL -> direct).
+const WAREHOUSE_OPTS = ['SFO', 'LAX'];
+const DIRECT_OPTS = ['ORD', 'HNL'];
+const isUnassigned = (loc: string) => !loc || loc === '—';
+const isDirect = (loc: string) => DIRECT_OPTS.includes(loc);
 
 interface OrderLine {
   species: string;
@@ -53,17 +62,29 @@ const fmtDate = (iso: string) => {
 };
 
 // Row grid — generous gaps, no fixed page max-width, so nothing overlaps
-const GRID = '22px 104px 1.1fr 1.4fr 84px 104px 76px 56px 140px 104px';
+const GRID = '22px 104px 1.1fr 1.4fr 84px 104px 76px 104px 120px 104px';
 const GRID_GAP = '14px';
 
 export default function OrdersPage() {
   const [filter, setFilter] = useState<'all' | OrderStatus>('all');
+  const [unassignedOnly, setUnassignedOnly] = useState(false);
   const [query, setQuery] = useState('');
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [sel, setSel] = useState<DateSelection | null>(null);
   const [todayIso, setTodayIso] = useState<string>('');
   const [rows, setRows] = useState<OrderRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [assignFor, setAssignFor] = useState<OrderRow | null>(null);
+  const [savingAssign, setSavingAssign] = useState(false);
+
+  const assignLocation = async (id: string, location: string) => {
+    setSavingAssign(true);
+    const { error } = await createClient().from('orders').update({ location }).eq('id', id);
+    setSavingAssign(false);
+    if (error) return; // keep the modal open on failure
+    setRows((prev) => prev.map((o) => (o.id === id ? { ...o, location } : o)));
+    setAssignFor(null);
+  };
 
   // today computed on the client to avoid SSR mismatch
   useEffect(() => {
@@ -147,6 +168,7 @@ export default function OrdersPage() {
 
   const filtered = dateFiltered.filter((o) => {
     if (filter !== 'all' && o.status !== filter) return false;
+    if (unassignedOnly && !isUnassigned(o.location)) return false;
     if (!query.trim()) return true;
     const q = query.toLowerCase();
     return (
@@ -156,6 +178,8 @@ export default function OrdersPage() {
       o.enteredBy.toLowerCase().includes(q)
     );
   });
+
+  const unassignedCount = dateFiltered.filter((o) => isUnassigned(o.location)).length;
 
   const rangeLbl = sel ? selectionLabel(sel) : 'Last 7 days';
   const todayOrders = todayIso ? rows.filter((o) => o.date === todayIso) : [];
@@ -272,41 +296,74 @@ export default function OrdersPage() {
             background: '#FFFFFF',
           }}
         >
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '2px',
-              background: '#F4F5F6',
-              border: '1px solid #E2E6E9',
-              borderRadius: '5px',
-              padding: '3px',
-            }}
-          >
-            {(['all', 'open', 'allocated', 'locked', 'shipped', 'invoiced'] as const).map((f) => (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '2px',
+                background: '#F4F5F6',
+                border: '1px solid #E2E6E9',
+                borderRadius: '5px',
+                padding: '3px',
+              }}
+            >
+              {(['all', 'open', 'allocated', 'locked', 'shipped', 'invoiced'] as const).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setFilter(f)}
+                  style={{
+                    fontFamily: "'Archivo', sans-serif",
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    border: 'none',
+                    borderRadius: '4px',
+                    padding: '6px 12px',
+                    cursor: 'pointer',
+                    background: filter === f ? '#3F6F86' : 'none',
+                    color: filter === f ? '#fff' : '#5A6670',
+                  }}
+                >
+                  {f === 'all' ? 'All' : STATUS_META[f].label}
+                  {f !== 'all' && (
+                    <span style={{ marginLeft: '6px', opacity: 0.75 }}>
+                      {dateFiltered.filter((o) => o.status === f).length}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => setUnassignedOnly((v) => !v)}
+              title="Orders with no warehouse yet — assign a warehouse or mark them direct"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '7px',
+                fontFamily: "'Archivo', sans-serif",
+                fontSize: '12px',
+                fontWeight: 600,
+                borderRadius: '5px',
+                padding: '7px 12px',
+                cursor: 'pointer',
+                border: `1px solid ${unassignedOnly ? '#B7791F' : '#E4D2A8'}`,
+                background: unassignedOnly ? '#B7791F' : '#F4EEE2',
+                color: unassignedOnly ? '#fff' : '#8A5A14',
+              }}
+            >
+              Warehouse unassigned
+              <span
                 style={{
-                  fontFamily: "'Archivo', sans-serif",
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  border: 'none',
-                  borderRadius: '4px',
-                  padding: '6px 12px',
-                  cursor: 'pointer',
-                  background: filter === f ? '#3F6F86' : 'none',
-                  color: filter === f ? '#fff' : '#5A6670',
+                  fontFamily: "'IBM Plex Mono', monospace",
+                  fontWeight: 700,
+                  background: unassignedOnly ? 'rgba(255,255,255,0.25)' : '#fff',
+                  borderRadius: '10px',
+                  padding: '0 7px',
                 }}
               >
-                {f === 'all' ? 'All' : STATUS_META[f].label}
-                {f !== 'all' && (
-                  <span style={{ marginLeft: '6px', opacity: 0.75 }}>
-                    {dateFiltered.filter((o) => o.status === f).length}
-                  </span>
-                )}
-              </button>
-            ))}
+                {unassignedCount}
+              </span>
+            </button>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
             <span
@@ -566,14 +623,52 @@ export default function OrdersPage() {
                     >
                       {fmtDate(o.shipDate)}
                     </span>
-                    <span
-                      style={{
-                        fontFamily: "'IBM Plex Mono', monospace",
-                        fontSize: '12px',
-                        color: '#5A6670',
-                      }}
-                    >
-                      {o.location}
+                    <span onClick={(e) => e.stopPropagation()}>
+                      {isUnassigned(o.location) ? (
+                        <button
+                          onClick={() => setAssignFor(o)}
+                          style={{
+                            fontFamily: "'Archivo', sans-serif",
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            color: '#8A5A14',
+                            background: '#F4EEE2',
+                            border: '1px solid #E4D2A8',
+                            borderRadius: '4px',
+                            padding: '4px 9px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          Assign
+                        </button>
+                      ) : isDirect(o.location) ? (
+                        <span
+                          title="Direct shipment — bypasses the warehouse"
+                          style={{
+                            fontFamily: "'IBM Plex Mono', monospace",
+                            fontSize: '10px',
+                            fontWeight: 700,
+                            color: '#5A3E6B',
+                            background: '#F0ECF6',
+                            border: '1px solid #D9CEE6',
+                            borderRadius: '3px',
+                            padding: '2px 7px',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {o.location} · Direct
+                        </span>
+                      ) : (
+                        <span
+                          style={{
+                            fontFamily: "'IBM Plex Mono', monospace",
+                            fontSize: '12px',
+                            color: '#5A6670',
+                          }}
+                        >
+                          {o.location}
+                        </span>
+                      )}
                     </span>
                     <span style={{ minWidth: 0 }}>
                       <span style={{ fontSize: '12px', fontWeight: 600 }}>{o.enteredBy}</span>
@@ -748,6 +843,131 @@ export default function OrdersPage() {
           </div>
         </div>
       </div>
+
+      {/* ASSIGN WAREHOUSE / DIRECT-SHIPMENT MODAL */}
+      {assignFor && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(34,42,48,0.40)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 60,
+          }}
+          onClick={() => setAssignFor(null)}
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: '10px',
+              padding: '26px',
+              width: '420px',
+              maxWidth: '94vw',
+              boxShadow: '0 16px 48px rgba(34,42,48,0.22)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontSize: '16px', fontWeight: 700, letterSpacing: '-0.01em' }}>
+              Route order {assignFor.code}
+            </div>
+            <div style={{ fontSize: '13px', color: '#5A6670', margin: '4px 0 18px' }}>
+              {assignFor.customer} · assign a warehouse to send it to the allocation board, or mark
+              it a direct shipment.
+            </div>
+
+            <div
+              style={{
+                fontSize: '11px',
+                fontWeight: 700,
+                letterSpacing: '0.06em',
+                color: '#8A99A3',
+                marginBottom: '8px',
+              }}
+            >
+              WAREHOUSE
+            </div>
+            <div style={{ display: 'flex', gap: '9px', marginBottom: '18px' }}>
+              {WAREHOUSE_OPTS.map((w) => (
+                <button
+                  key={w}
+                  disabled={savingAssign}
+                  onClick={() => assignLocation(assignFor.id, w)}
+                  style={{
+                    flex: 1,
+                    fontFamily: "'Archivo', sans-serif",
+                    fontSize: '15px',
+                    fontWeight: 700,
+                    color: '#2D5365',
+                    background: '#EEF3F6',
+                    border: '1.5px solid #C5D8E2',
+                    borderRadius: '7px',
+                    padding: '14px',
+                    cursor: savingAssign ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {w}
+                </button>
+              ))}
+            </div>
+
+            <div
+              style={{
+                fontSize: '11px',
+                fontWeight: 700,
+                letterSpacing: '0.06em',
+                color: '#8A99A3',
+                marginBottom: '8px',
+              }}
+            >
+              DIRECT SHIPMENT · BYPASSES THE WAREHOUSE
+            </div>
+            <div style={{ display: 'flex', gap: '9px' }}>
+              {DIRECT_OPTS.map((d) => (
+                <button
+                  key={d}
+                  disabled={savingAssign}
+                  onClick={() => assignLocation(assignFor.id, d)}
+                  style={{
+                    flex: 1,
+                    fontFamily: "'Archivo', sans-serif",
+                    fontSize: '14px',
+                    fontWeight: 700,
+                    color: '#5A3E6B',
+                    background: '#F0ECF6',
+                    border: '1.5px solid #D9CEE6',
+                    borderRadius: '7px',
+                    padding: '12px',
+                    cursor: savingAssign ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {d} · Direct
+                </button>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
+              <button
+                onClick={() => setAssignFor(null)}
+                style={{
+                  fontFamily: "'Archivo', sans-serif",
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  background: '#fff',
+                  color: '#5A6670',
+                  border: '1px solid #D6DCE0',
+                  borderRadius: '5px',
+                  padding: '10px 16px',
+                  cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

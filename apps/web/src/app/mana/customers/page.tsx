@@ -25,6 +25,7 @@ interface DbCustomer {
   standing_order: string | null;
   channel_pref: string | null;
   status: 'active' | 'inactive' | null;
+  created_at: string;
   price_overrides?: {
     sku: string;
     species: string | null;
@@ -39,21 +40,27 @@ interface Customer {
   contact: string;
   phone: string;
   email: string;
-  tier: 'T1' | 'T2' | 'T3';
+  tier: 'T1' | 'T2' | 'T3' | null; // null = not assigned yet (portal signups)
   defaultCarrier: string;
   terms: string;
   location: string;
   standingOrder?: string;
   channelPref: string;
   status: 'active' | 'inactive';
+  createdAt: string;
   overrides: PriceOverride[];
 }
 
-const TIER_META: Record<Customer['tier'], { label: string; color: string; bg: string }> = {
+const TIER_META: Record<string, { label: string; color: string; bg: string }> = {
   T1: { label: 'Tier 1 — Premium', color: '#2D5365', bg: '#EEF3F6' },
   T2: { label: 'Tier 2 — Standard', color: '#2E6347', bg: '#EAF1ED' },
   T3: { label: 'Tier 3 — COD', color: '#8A5A14', bg: '#F4EEE2' },
 };
+
+// Meta for a tier that may be unassigned. Staff see "Unassigned" so they know
+// to set a tier before the customer's portal shows pricing.
+const tierMeta = (t: string | null) =>
+  (t && TIER_META[t]) || { label: 'Unassigned', color: '#8A5A14', bg: '#F4EEE2' };
 
 function mapCustomer(c: DbCustomer): Customer {
   return {
@@ -62,13 +69,14 @@ function mapCustomer(c: DbCustomer): Customer {
     contact: c.contact ?? '',
     phone: c.phone ?? '',
     email: c.email ?? '',
-    tier: c.tier ?? 'T2',
+    tier: c.tier ?? null,
     defaultCarrier: c.default_carrier ?? '—',
     terms: c.terms ?? '—',
     location: c.location ?? '—',
     standingOrder: c.standing_order ?? undefined,
     channelPref: c.channel_pref ?? 'Phone',
     status: c.status ?? 'active',
+    createdAt: c.created_at,
     overrides: (c.price_overrides ?? []).map((o) => ({
       sku: o.sku,
       species: o.species ?? o.sku,
@@ -83,7 +91,7 @@ type FormState = {
   contact: string;
   phone: string;
   email: string;
-  tier: Customer['tier'];
+  tier: 'T1' | 'T2' | 'T3' | ''; // '' = leave unassigned
   defaultCarrier: string;
   terms: string;
   location: string;
@@ -96,7 +104,7 @@ const EMPTY_FORM: FormState = {
   contact: '',
   phone: '',
   email: '',
-  tier: 'T2',
+  tier: '',
   defaultCarrier: '',
   terms: 'Net 30',
   location: 'SFO',
@@ -109,6 +117,11 @@ export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [tierFilter, setTierFilter] = useState<'all' | 'unassigned' | 'T1' | 'T2' | 'T3'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [locationFilter, setLocationFilter] = useState('all');
+  const [addedFilter, setAddedFilter] = useState<'all' | '7' | '30'>('all');
+  const [sort, setSort] = useState<'newest' | 'oldest' | 'name'>('newest');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editor, setEditor] = useState<{ open: boolean; editingId: string | null }>({
     open: false,
@@ -141,7 +154,7 @@ export default function CustomersPage() {
       contact: c.contact,
       phone: c.phone,
       email: c.email,
-      tier: c.tier,
+      tier: c.tier ?? '',
       defaultCarrier: c.defaultCarrier,
       terms: c.terms,
       location: c.location,
@@ -161,7 +174,7 @@ export default function CustomersPage() {
       contact: form.contact || null,
       phone: form.phone || null,
       email: form.email || null,
-      tier: form.tier,
+      tier: form.tier || null,
       default_carrier: form.defaultCarrier || null,
       terms: form.terms || null,
       location: form.location || null,
@@ -185,12 +198,56 @@ export default function CustomersPage() {
     fetchAll();
   };
 
-  const filtered = customers.filter((c) =>
-    search
-      ? c.name.toLowerCase().includes(search.toLowerCase()) ||
-        c.contact.toLowerCase().includes(search.toLowerCase())
-      : true
-  );
+  // Distinct warehouses present in the data, for the location filter.
+  const locations = Array.from(
+    new Set(customers.map((c) => c.location).filter((l) => l && l !== '—'))
+  ).sort();
+
+  const now = Date.now();
+  const filtered = customers
+    .filter((c) => {
+      if (!search) return true;
+      const q = search.toLowerCase();
+      return (
+        c.name.toLowerCase().includes(q) ||
+        c.contact.toLowerCase().includes(q) ||
+        c.email.toLowerCase().includes(q)
+      );
+    })
+    .filter((c) =>
+      tierFilter === 'all' ? true : tierFilter === 'unassigned' ? !c.tier : c.tier === tierFilter
+    )
+    .filter((c) => (statusFilter === 'all' ? true : c.status === statusFilter))
+    .filter((c) => (locationFilter === 'all' ? true : c.location === locationFilter))
+    .filter((c) => {
+      if (addedFilter === 'all') return true;
+      const cutoff = now - Number(addedFilter) * 86400000;
+      return new Date(c.createdAt).getTime() >= cutoff;
+    })
+    .sort((a, b) => {
+      if (sort === 'name') return a.name.localeCompare(b.name);
+      const da = new Date(a.createdAt).getTime();
+      const db = new Date(b.createdAt).getTime();
+      return sort === 'oldest' ? da - db : db - da;
+    });
+
+  const unassignedCount = customers.filter((c) => !c.tier).length;
+  const newCount = customers.filter(
+    (c) => new Date(c.createdAt).getTime() >= now - 7 * 86400000
+  ).length;
+  const filtersActive =
+    !!search ||
+    tierFilter !== 'all' ||
+    statusFilter !== 'all' ||
+    locationFilter !== 'all' ||
+    addedFilter !== 'all';
+  const clearFilters = () => {
+    setSearch('');
+    setTierFilter('all');
+    setStatusFilter('all');
+    setLocationFilter('all');
+    setAddedFilter('all');
+  };
 
   const selected = customers.find((c) => c.id === selectedId) || null;
 
@@ -204,6 +261,30 @@ export default function CustomersPage() {
     color: '#8A99A3',
     marginBottom: '4px',
   };
+
+  const selStyle: React.CSSProperties = {
+    fontFamily: "'Archivo', sans-serif",
+    fontSize: '12px',
+    fontWeight: 600,
+    color: '#5A6670',
+    background: '#fff',
+    border: '1px solid #D6DCE0',
+    borderRadius: '5px',
+    padding: '7px 10px',
+    cursor: 'pointer',
+    outline: 'none',
+  };
+  const chipStyle = (on: boolean): React.CSSProperties => ({
+    fontFamily: "'Archivo', sans-serif",
+    fontSize: '12px',
+    fontWeight: 600,
+    borderRadius: '20px',
+    padding: '6px 13px',
+    cursor: 'pointer',
+    border: `1px solid ${on ? '#3F6F86' : '#D6DCE0'}`,
+    background: on ? '#3F6F86' : '#fff',
+    color: on ? '#fff' : '#5A6670',
+  });
 
   return (
     <div
@@ -299,6 +380,105 @@ export default function CustomersPage() {
           </div>
         </header>
 
+        {/* FILTER TOOLBAR */}
+        <div
+          style={{
+            flex: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px',
+            flexWrap: 'wrap',
+            padding: '11px 28px',
+            borderBottom: '1px solid #E2E6E9',
+            background: '#FFFFFF',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <button
+              onClick={() => setAddedFilter((f) => (f === '7' ? 'all' : '7'))}
+              style={chipStyle(addedFilter === '7')}
+            >
+              New this week · {newCount}
+            </button>
+            <button
+              onClick={() => setTierFilter((f) => (f === 'unassigned' ? 'all' : 'unassigned'))}
+              style={chipStyle(tierFilter === 'unassigned')}
+            >
+              Unassigned tier · {unassignedCount}
+            </button>
+            <span style={{ fontSize: '12px', color: '#8A99A3', marginLeft: '4px' }}>
+              {filtered.length} of {customers.length}
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <select
+              value={tierFilter}
+              onChange={(e) => setTierFilter(e.target.value as typeof tierFilter)}
+              style={selStyle}
+              title="Filter by tier"
+            >
+              <option value="all">All tiers</option>
+              <option value="unassigned">Unassigned</option>
+              <option value="T1">Tier 1</option>
+              <option value="T2">Tier 2</option>
+              <option value="T3">Tier 3</option>
+            </select>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+              style={selStyle}
+              title="Filter by status"
+            >
+              <option value="all">All statuses</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+            <select
+              value={locationFilter}
+              onChange={(e) => setLocationFilter(e.target.value)}
+              style={selStyle}
+              title="Filter by warehouse"
+            >
+              <option value="all">All warehouses</option>
+              {locations.map((l) => (
+                <option key={l} value={l}>
+                  {l}
+                </option>
+              ))}
+            </select>
+            <select
+              value={addedFilter}
+              onChange={(e) => setAddedFilter(e.target.value as typeof addedFilter)}
+              style={selStyle}
+              title="Filter by date added"
+            >
+              <option value="all">Any time</option>
+              <option value="7">Added · last 7 days</option>
+              <option value="30">Added · last 30 days</option>
+            </select>
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as typeof sort)}
+              style={selStyle}
+              title="Sort"
+            >
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+              <option value="name">Name A–Z</option>
+            </select>
+            {filtersActive && (
+              <button
+                onClick={clearFilters}
+                style={{ ...selStyle, color: '#A5362C', border: '1px solid #E3B6B1' }}
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
+
         <div style={{ flex: 1, overflowY: 'auto', padding: '22px 28px' }}>
           <div
             style={{
@@ -331,7 +511,7 @@ export default function CustomersPage() {
               <span style={{ textAlign: 'right' }}>ACTION</span>
             </div>
             {filtered.map((c) => {
-              const tm = TIER_META[c.tier];
+              const tm = tierMeta(c.tier);
               return (
                 <div
                   key={c.id}
@@ -365,7 +545,7 @@ export default function CustomersPage() {
                         padding: '3px 9px',
                       }}
                     >
-                      {c.tier}
+                      {c.tier ?? 'Unassigned'}
                     </span>
                   </span>
                   <span style={{ fontSize: '12px', color: '#5A6670' }}>{c.defaultCarrier}</span>
@@ -467,13 +647,13 @@ export default function CustomersPage() {
                     style={{
                       fontSize: '11px',
                       fontWeight: 700,
-                      color: TIER_META[selected.tier].color,
-                      background: TIER_META[selected.tier].bg,
+                      color: tierMeta(selected.tier).color,
+                      background: tierMeta(selected.tier).bg,
                       borderRadius: '3px',
                       padding: '3px 9px',
                     }}
                   >
-                    {TIER_META[selected.tier].label}
+                    {tierMeta(selected.tier).label}
                   </span>
                 </div>
                 <div
@@ -595,7 +775,9 @@ export default function CustomersPage() {
                 </div>
                 {selected.overrides.length === 0 ? (
                   <div style={{ fontSize: '13px', color: '#8A99A3' }}>
-                    No overrides — uses {TIER_META[selected.tier].label} pricing.
+                    {selected.tier
+                      ? `No overrides — uses ${tierMeta(selected.tier).label} pricing.`
+                      : 'No tier assigned yet — assign one so this customer sees pricing in their portal.'}
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -828,9 +1010,10 @@ export default function CustomersPage() {
                           style={fieldInput}
                           value={form.tier}
                           onChange={(e) =>
-                            setForm((f) => ({ ...f, tier: e.target.value as Customer['tier'] }))
+                            setForm((f) => ({ ...f, tier: e.target.value as FormState['tier'] }))
                           }
                         >
+                          <option value="">— Unassigned (no portal pricing yet) —</option>
                           <option value="T1">Tier 1 — Premium</option>
                           <option value="T2">Tier 2 — Standard</option>
                           <option value="T3">Tier 3 — COD</option>

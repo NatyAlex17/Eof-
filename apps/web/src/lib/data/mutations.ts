@@ -143,6 +143,11 @@ export async function createOrder(
     ship_date?: string | null;
     location?: string | null;
     color?: string | null;
+    source?: string; // 'staff' (default) | 'customer'
+    contact_name?: string | null;
+    contact_phone?: string | null;
+    delivery_address?: string | null;
+    freight_mode?: string | null; // 'trucker' | 'air' | 'customer_pickup'
   },
   lines: Array<{
     species: string;
