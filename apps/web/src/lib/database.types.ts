@@ -1,4 +1,4 @@
-export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
+﻿export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
 export type Database = {
   // Allows to automatically instantiate createClient with right options
@@ -8,6 +8,156 @@ export type Database = {
   };
   public: {
     Tables: {
+      ap_bills: {
+        Row: {
+          amount: number;
+          amount_paid: number;
+          bill_date: string | null;
+          bill_no: string | null;
+          created_at: string;
+          due_date: string | null;
+          entity: Database['public']['Enums']['operating_entity'];
+          id: string;
+          memo: string | null;
+          purchase_order_id: string | null;
+          qbo_bill_id: string | null;
+          status: Database['public']['Enums']['ap_bill_status'];
+          vendor_id: string;
+          vendor_invoice_id: string | null;
+        };
+        Insert: {
+          amount?: number;
+          amount_paid?: number;
+          bill_date?: string | null;
+          bill_no?: string | null;
+          created_at?: string;
+          due_date?: string | null;
+          entity?: Database['public']['Enums']['operating_entity'];
+          id?: string;
+          memo?: string | null;
+          purchase_order_id?: string | null;
+          qbo_bill_id?: string | null;
+          status?: Database['public']['Enums']['ap_bill_status'];
+          vendor_id: string;
+          vendor_invoice_id?: string | null;
+        };
+        Update: {
+          amount?: number;
+          amount_paid?: number;
+          bill_date?: string | null;
+          bill_no?: string | null;
+          created_at?: string;
+          due_date?: string | null;
+          entity?: Database['public']['Enums']['operating_entity'];
+          id?: string;
+          memo?: string | null;
+          purchase_order_id?: string | null;
+          qbo_bill_id?: string | null;
+          status?: Database['public']['Enums']['ap_bill_status'];
+          vendor_id?: string;
+          vendor_invoice_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'ap_bills_purchase_order_id_fkey';
+            columns: ['purchase_order_id'];
+            isOneToOne: false;
+            referencedRelation: 'purchase_orders';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'ap_bills_vendor_id_fkey';
+            columns: ['vendor_id'];
+            isOneToOne: false;
+            referencedRelation: 'vendors';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'ap_bills_vendor_invoice_id_fkey';
+            columns: ['vendor_invoice_id'];
+            isOneToOne: false;
+            referencedRelation: 'vendor_invoices';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      ap_payment_applications: {
+        Row: {
+          amount: number;
+          bill_id: string;
+          id: string;
+          payment_id: string;
+        };
+        Insert: {
+          amount: number;
+          bill_id: string;
+          id?: string;
+          payment_id: string;
+        };
+        Update: {
+          amount?: number;
+          bill_id?: string;
+          id?: string;
+          payment_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'ap_payment_applications_bill_id_fkey';
+            columns: ['bill_id'];
+            isOneToOne: false;
+            referencedRelation: 'ap_bills';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'ap_payment_applications_payment_id_fkey';
+            columns: ['payment_id'];
+            isOneToOne: false;
+            referencedRelation: 'ap_payments';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      ap_payments: {
+        Row: {
+          amount: number;
+          created_at: string;
+          id: string;
+          method: string | null;
+          paid_at: string;
+          qbo_payment_id: string | null;
+          reference: string | null;
+          vendor_id: string | null;
+        };
+        Insert: {
+          amount: number;
+          created_at?: string;
+          id?: string;
+          method?: string | null;
+          paid_at?: string;
+          qbo_payment_id?: string | null;
+          reference?: string | null;
+          vendor_id?: string | null;
+        };
+        Update: {
+          amount?: number;
+          created_at?: string;
+          id?: string;
+          method?: string | null;
+          paid_at?: string;
+          qbo_payment_id?: string | null;
+          reference?: string | null;
+          vendor_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'ap_payments_vendor_id_fkey';
+            columns: ['vendor_id'];
+            isOneToOne: false;
+            referencedRelation: 'vendors';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
       audit_log: {
         Row: {
           action: string;
@@ -330,6 +480,101 @@ export type Database = {
         };
         Relationships: [];
       };
+      documents: {
+        Row: {
+          created_at: string;
+          destination_code: string | null;
+          id: string;
+          kind: Database['public']['Enums']['document_kind'];
+          manual_overrides: Json;
+          mime_type: string | null;
+          original_filename: string;
+          parse_error: string | null;
+          parse_status: Database['public']['Enums']['parse_status'];
+          parsed_payload: Json | null;
+          parser_version: string | null;
+          reviewed_at: string | null;
+          reviewed_by: string | null;
+          routing_detected: Database['public']['Enums']['shipment_routing'] | null;
+          sha256: string | null;
+          shipment_id: string | null;
+          storage_path: string;
+          vendor_email_id: string | null;
+          vendor_id: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          destination_code?: string | null;
+          id?: string;
+          kind?: Database['public']['Enums']['document_kind'];
+          manual_overrides?: Json;
+          mime_type?: string | null;
+          original_filename: string;
+          parse_error?: string | null;
+          parse_status?: Database['public']['Enums']['parse_status'];
+          parsed_payload?: Json | null;
+          parser_version?: string | null;
+          reviewed_at?: string | null;
+          reviewed_by?: string | null;
+          routing_detected?: Database['public']['Enums']['shipment_routing'] | null;
+          sha256?: string | null;
+          shipment_id?: string | null;
+          storage_path: string;
+          vendor_email_id?: string | null;
+          vendor_id?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          destination_code?: string | null;
+          id?: string;
+          kind?: Database['public']['Enums']['document_kind'];
+          manual_overrides?: Json;
+          mime_type?: string | null;
+          original_filename?: string;
+          parse_error?: string | null;
+          parse_status?: Database['public']['Enums']['parse_status'];
+          parsed_payload?: Json | null;
+          parser_version?: string | null;
+          reviewed_at?: string | null;
+          reviewed_by?: string | null;
+          routing_detected?: Database['public']['Enums']['shipment_routing'] | null;
+          sha256?: string | null;
+          shipment_id?: string | null;
+          storage_path?: string;
+          vendor_email_id?: string | null;
+          vendor_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'documents_reviewed_by_fkey';
+            columns: ['reviewed_by'];
+            isOneToOne: false;
+            referencedRelation: 'profiles';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'documents_shipment_id_fkey';
+            columns: ['shipment_id'];
+            isOneToOne: false;
+            referencedRelation: 'shipments';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'documents_vendor_email_id_fkey';
+            columns: ['vendor_email_id'];
+            isOneToOne: false;
+            referencedRelation: 'vendor_emails';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'documents_vendor_id_fkey';
+            columns: ['vendor_id'];
+            isOneToOne: false;
+            referencedRelation: 'vendors';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
       downgrades: {
         Row: {
           box: string | null;
@@ -440,16 +685,82 @@ export type Database = {
         };
         Relationships: [];
       };
+      invoice_lines: {
+        Row: {
+          amount: number | null;
+          carton_ref_raw: string | null;
+          created_at: string;
+          description: string | null;
+          grade: string | null;
+          id: string;
+          invoice_id: string;
+          pieces: number | null;
+          qbo_billable: boolean;
+          source_vendor_invoice_line_id: string | null;
+          species: string | null;
+          unit_price_lb: number | null;
+          weight_lb: number | null;
+        };
+        Insert: {
+          amount?: number | null;
+          carton_ref_raw?: string | null;
+          created_at?: string;
+          description?: string | null;
+          grade?: string | null;
+          id?: string;
+          invoice_id: string;
+          pieces?: number | null;
+          qbo_billable?: boolean;
+          source_vendor_invoice_line_id?: string | null;
+          species?: string | null;
+          unit_price_lb?: number | null;
+          weight_lb?: number | null;
+        };
+        Update: {
+          amount?: number | null;
+          carton_ref_raw?: string | null;
+          created_at?: string;
+          description?: string | null;
+          grade?: string | null;
+          id?: string;
+          invoice_id?: string;
+          pieces?: number | null;
+          qbo_billable?: boolean;
+          source_vendor_invoice_line_id?: string | null;
+          species?: string | null;
+          unit_price_lb?: number | null;
+          weight_lb?: number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'invoice_lines_invoice_id_fkey';
+            columns: ['invoice_id'];
+            isOneToOne: false;
+            referencedRelation: 'invoices';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'invoice_lines_source_vendor_invoice_line_id_fkey';
+            columns: ['source_vendor_invoice_line_id'];
+            isOneToOne: false;
+            referencedRelation: 'vendor_invoice_lines';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
       invoices: {
         Row: {
           amount: number;
           created_at: string;
           customer_id: string | null;
+          entity: Database['public']['Enums']['operating_entity'];
           err_msg: string | null;
           id: string;
           invoice_no: string;
           order_id: string | null;
           qbo_ref: string | null;
+          shipment_id: string | null;
+          source_vendor_invoice_id: string | null;
           status: Database['public']['Enums']['invoice_status'];
           synced_at: string | null;
           terms: string | null;
@@ -458,11 +769,14 @@ export type Database = {
           amount?: number;
           created_at?: string;
           customer_id?: string | null;
+          entity?: Database['public']['Enums']['operating_entity'];
           err_msg?: string | null;
           id?: string;
           invoice_no: string;
           order_id?: string | null;
           qbo_ref?: string | null;
+          shipment_id?: string | null;
+          source_vendor_invoice_id?: string | null;
           status?: Database['public']['Enums']['invoice_status'];
           synced_at?: string | null;
           terms?: string | null;
@@ -471,11 +785,14 @@ export type Database = {
           amount?: number;
           created_at?: string;
           customer_id?: string | null;
+          entity?: Database['public']['Enums']['operating_entity'];
           err_msg?: string | null;
           id?: string;
           invoice_no?: string;
           order_id?: string | null;
           qbo_ref?: string | null;
+          shipment_id?: string | null;
+          source_vendor_invoice_id?: string | null;
           status?: Database['public']['Enums']['invoice_status'];
           synced_at?: string | null;
           terms?: string | null;
@@ -500,6 +817,20 @@ export type Database = {
             columns: ['order_id'];
             isOneToOne: false;
             referencedRelation: 'orders_with_fulfillment';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'invoices_shipment_id_fkey';
+            columns: ['shipment_id'];
+            isOneToOne: false;
+            referencedRelation: 'shipments';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'invoices_source_vendor_invoice_id_fkey';
+            columns: ['source_vendor_invoice_id'];
+            isOneToOne: false;
+            referencedRelation: 'vendor_invoices';
             referencedColumns: ['id'];
           },
         ];
@@ -758,6 +1089,57 @@ export type Database = {
           },
         ];
       };
+      po_import_batches: {
+        Row: {
+          created_at: string;
+          created_by: string | null;
+          direction: string;
+          document_id: string | null;
+          error: string | null;
+          id: string;
+          row_count: number | null;
+          status: string;
+          target: string;
+        };
+        Insert: {
+          created_at?: string;
+          created_by?: string | null;
+          direction: string;
+          document_id?: string | null;
+          error?: string | null;
+          id?: string;
+          row_count?: number | null;
+          status?: string;
+          target?: string;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string | null;
+          direction?: string;
+          document_id?: string | null;
+          error?: string | null;
+          id?: string;
+          row_count?: number | null;
+          status?: string;
+          target?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'po_import_batches_created_by_fkey';
+            columns: ['created_by'];
+            isOneToOne: false;
+            referencedRelation: 'profiles';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'po_import_batches_document_id_fkey';
+            columns: ['document_id'];
+            isOneToOne: false;
+            referencedRelation: 'documents';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
       price_overrides: {
         Row: {
           created_at: string;
@@ -861,43 +1243,163 @@ export type Database = {
           role?: Database['public']['Enums']['user_role'];
           status?: Database['public']['Enums']['user_status'];
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: 'profiles_customer_id_fkey';
+            columns: ['customer_id'];
+            isOneToOne: false;
+            referencedRelation: 'customers';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      purchase_order_lines: {
+        Row: {
+          amount: number | null;
+          box_id: string | null;
+          box_numbers: number[] | null;
+          box_ref_raw: string | null;
+          created_at: string;
+          grade: string | null;
+          id: string;
+          purchase_order_id: string;
+          rate_per_lb: number | null;
+          sku_code: string | null;
+          species: string;
+          weight_lb: number | null;
+        };
+        Insert: {
+          amount?: number | null;
+          box_id?: string | null;
+          box_numbers?: number[] | null;
+          box_ref_raw?: string | null;
+          created_at?: string;
+          grade?: string | null;
+          id?: string;
+          purchase_order_id: string;
+          rate_per_lb?: number | null;
+          sku_code?: string | null;
+          species: string;
+          weight_lb?: number | null;
+        };
+        Update: {
+          amount?: number | null;
+          box_id?: string | null;
+          box_numbers?: number[] | null;
+          box_ref_raw?: string | null;
+          created_at?: string;
+          grade?: string | null;
+          id?: string;
+          purchase_order_id?: string;
+          rate_per_lb?: number | null;
+          sku_code?: string | null;
+          species?: string;
+          weight_lb?: number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'purchase_order_lines_box_id_fkey';
+            columns: ['box_id'];
+            isOneToOne: false;
+            referencedRelation: 'boxes';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'purchase_order_lines_purchase_order_id_fkey';
+            columns: ['purchase_order_id'];
+            isOneToOne: false;
+            referencedRelation: 'purchase_orders';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'purchase_order_lines_sku_code_fkey';
+            columns: ['sku_code'];
+            isOneToOne: false;
+            referencedRelation: 'skus';
+            referencedColumns: ['code'];
+          },
+        ];
       };
       purchase_orders: {
         Row: {
+          bill_status: Database['public']['Enums']['po_bill_status'];
           created_at: string;
+          customer_id: string | null;
+          document_id: string | null;
+          entity: Database['public']['Enums']['operating_entity'];
           expected_at: string | null;
           expected_lb: number;
           id: string;
+          import_batch_id: string | null;
           lot_id: string | null;
+          order_date: string | null;
+          order_id: string | null;
           po_number: string;
+          qbo_po_id: string | null;
           species: string;
           status: string;
           vendor_id: string;
         };
         Insert: {
+          bill_status?: Database['public']['Enums']['po_bill_status'];
           created_at?: string;
+          customer_id?: string | null;
+          document_id?: string | null;
+          entity?: Database['public']['Enums']['operating_entity'];
           expected_at?: string | null;
           expected_lb?: number;
           id?: string;
+          import_batch_id?: string | null;
           lot_id?: string | null;
+          order_date?: string | null;
+          order_id?: string | null;
           po_number: string;
+          qbo_po_id?: string | null;
           species: string;
           status?: string;
           vendor_id: string;
         };
         Update: {
+          bill_status?: Database['public']['Enums']['po_bill_status'];
           created_at?: string;
+          customer_id?: string | null;
+          document_id?: string | null;
+          entity?: Database['public']['Enums']['operating_entity'];
           expected_at?: string | null;
           expected_lb?: number;
           id?: string;
+          import_batch_id?: string | null;
           lot_id?: string | null;
+          order_date?: string | null;
+          order_id?: string | null;
           po_number?: string;
+          qbo_po_id?: string | null;
           species?: string;
           status?: string;
           vendor_id?: string;
         };
         Relationships: [
+          {
+            foreignKeyName: 'purchase_orders_customer_id_fkey';
+            columns: ['customer_id'];
+            isOneToOne: false;
+            referencedRelation: 'customers';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'purchase_orders_document_id_fkey';
+            columns: ['document_id'];
+            isOneToOne: false;
+            referencedRelation: 'documents';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'purchase_orders_import_batch_fkey';
+            columns: ['import_batch_id'];
+            isOneToOne: false;
+            referencedRelation: 'po_import_batches';
+            referencedColumns: ['id'];
+          },
           {
             foreignKeyName: 'purchase_orders_lot_id_fkey';
             columns: ['lot_id'];
@@ -906,11 +1408,212 @@ export type Database = {
             referencedColumns: ['id'];
           },
           {
+            foreignKeyName: 'purchase_orders_order_id_fkey';
+            columns: ['order_id'];
+            isOneToOne: false;
+            referencedRelation: 'orders';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'purchase_orders_order_id_fkey';
+            columns: ['order_id'];
+            isOneToOne: false;
+            referencedRelation: 'orders_with_fulfillment';
+            referencedColumns: ['id'];
+          },
+          {
             foreignKeyName: 'purchase_orders_vendor_id_fkey';
             columns: ['vendor_id'];
             isOneToOne: false;
             referencedRelation: 'vendors';
             referencedColumns: ['id'];
+          },
+        ];
+      };
+      qbo_object_links: {
+        Row: {
+          error: string | null;
+          id: string;
+          last_synced_at: string | null;
+          local_id: string;
+          local_table: string;
+          qbo_id: string;
+          qbo_type: string;
+          sync_status: string;
+        };
+        Insert: {
+          error?: string | null;
+          id?: string;
+          last_synced_at?: string | null;
+          local_id: string;
+          local_table: string;
+          qbo_id: string;
+          qbo_type: string;
+          sync_status?: string;
+        };
+        Update: {
+          error?: string | null;
+          id?: string;
+          last_synced_at?: string | null;
+          local_id?: string;
+          local_table?: string;
+          qbo_id?: string;
+          qbo_type?: string;
+          sync_status?: string;
+        };
+        Relationships: [];
+      };
+      roles: {
+        Row: {
+          assignable: boolean;
+          bg: string;
+          color: string;
+          created_at: string;
+          description: string | null;
+          is_system: boolean;
+          key: string;
+          label: string;
+          sort: number;
+        };
+        Insert: {
+          assignable?: boolean;
+          bg?: string;
+          color?: string;
+          created_at?: string;
+          description?: string | null;
+          is_system?: boolean;
+          key: string;
+          label: string;
+          sort?: number;
+        };
+        Update: {
+          assignable?: boolean;
+          bg?: string;
+          color?: string;
+          created_at?: string;
+          description?: string | null;
+          is_system?: boolean;
+          key?: string;
+          label?: string;
+          sort?: number;
+        };
+        Relationships: [];
+      };
+      shipments: {
+        Row: {
+          arrived_at: string | null;
+          awb: string | null;
+          commercial_invoice_document_id: string | null;
+          created_at: string;
+          customer_id: string | null;
+          destination_code: string | null;
+          entity: Database['public']['Enums']['operating_entity'];
+          eta: string | null;
+          id: string;
+          notes: string | null;
+          origin: string | null;
+          packing_list_document_id: string | null;
+          routing: Database['public']['Enums']['shipment_routing'];
+          status: string;
+          vendor_id: string;
+        };
+        Insert: {
+          arrived_at?: string | null;
+          awb?: string | null;
+          commercial_invoice_document_id?: string | null;
+          created_at?: string;
+          customer_id?: string | null;
+          destination_code?: string | null;
+          entity?: Database['public']['Enums']['operating_entity'];
+          eta?: string | null;
+          id?: string;
+          notes?: string | null;
+          origin?: string | null;
+          packing_list_document_id?: string | null;
+          routing?: Database['public']['Enums']['shipment_routing'];
+          status?: string;
+          vendor_id: string;
+        };
+        Update: {
+          arrived_at?: string | null;
+          awb?: string | null;
+          commercial_invoice_document_id?: string | null;
+          created_at?: string;
+          customer_id?: string | null;
+          destination_code?: string | null;
+          entity?: Database['public']['Enums']['operating_entity'];
+          eta?: string | null;
+          id?: string;
+          notes?: string | null;
+          origin?: string | null;
+          packing_list_document_id?: string | null;
+          routing?: Database['public']['Enums']['shipment_routing'];
+          status?: string;
+          vendor_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'shipments_commercial_invoice_document_id_fkey';
+            columns: ['commercial_invoice_document_id'];
+            isOneToOne: false;
+            referencedRelation: 'documents';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'shipments_customer_id_fkey';
+            columns: ['customer_id'];
+            isOneToOne: false;
+            referencedRelation: 'customers';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'shipments_packing_list_document_id_fkey';
+            columns: ['packing_list_document_id'];
+            isOneToOne: false;
+            referencedRelation: 'documents';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'shipments_vendor_id_fkey';
+            columns: ['vendor_id'];
+            isOneToOne: false;
+            referencedRelation: 'vendors';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      sku_entity_codes: {
+        Row: {
+          code: string;
+          default_selling_price: number | null;
+          entity: Database['public']['Enums']['operating_entity'];
+          id: string;
+          qbo_item_id: string | null;
+          sku_code: string;
+        };
+        Insert: {
+          code: string;
+          default_selling_price?: number | null;
+          entity: Database['public']['Enums']['operating_entity'];
+          id?: string;
+          qbo_item_id?: string | null;
+          sku_code: string;
+        };
+        Update: {
+          code?: string;
+          default_selling_price?: number | null;
+          entity?: Database['public']['Enums']['operating_entity'];
+          id?: string;
+          qbo_item_id?: string | null;
+          sku_code?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'sku_entity_codes_sku_code_fkey';
+            columns: ['sku_code'];
+            isOneToOne: false;
+            referencedRelation: 'skus';
+            referencedColumns: ['code'];
           },
         ];
       };
@@ -950,81 +1653,6 @@ export type Database = {
           qbo_item?: string | null;
           species?: string;
           uom?: string | null;
-        };
-        Relationships: [];
-      };
-      tier_species_prices: {
-        Row: {
-          id: string;
-          price_lb: number;
-          sku_code: string;
-          tier: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          price_lb: number;
-          sku_code: string;
-          tier: string;
-          updated_at?: string;
-        };
-        Update: {
-          id?: string;
-          price_lb?: number;
-          sku_code?: string;
-          tier?: string;
-          updated_at?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: 'tier_species_prices_sku_code_fkey';
-            columns: ['sku_code'];
-            isOneToOne: false;
-            referencedRelation: 'skus';
-            referencedColumns: ['code'];
-          },
-          {
-            foreignKeyName: 'tier_species_prices_tier_fkey';
-            columns: ['tier'];
-            isOneToOne: false;
-            referencedRelation: 'pricing_tiers';
-            referencedColumns: ['tier'];
-          },
-        ];
-      };
-      roles: {
-        Row: {
-          key: string;
-          label: string;
-          description: string | null;
-          color: string;
-          bg: string;
-          sort: number;
-          is_system: boolean;
-          assignable: boolean;
-          created_at: string;
-        };
-        Insert: {
-          key: string;
-          label: string;
-          description?: string | null;
-          color?: string;
-          bg?: string;
-          sort?: number;
-          is_system?: boolean;
-          assignable?: boolean;
-          created_at?: string;
-        };
-        Update: {
-          key?: string;
-          label?: string;
-          description?: string | null;
-          color?: string;
-          bg?: string;
-          sort?: number;
-          is_system?: boolean;
-          assignable?: boolean;
-          created_at?: string;
         };
         Relationships: [];
       };
@@ -1101,6 +1729,45 @@ export type Database = {
           },
         ];
       };
+      tier_species_prices: {
+        Row: {
+          id: string;
+          price_lb: number;
+          sku_code: string;
+          tier: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          price_lb: number;
+          sku_code: string;
+          tier: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          price_lb?: number;
+          sku_code?: string;
+          tier?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'tier_species_prices_sku_code_fkey';
+            columns: ['sku_code'];
+            isOneToOne: false;
+            referencedRelation: 'skus';
+            referencedColumns: ['code'];
+          },
+          {
+            foreignKeyName: 'tier_species_prices_tier_fkey';
+            columns: ['tier'];
+            isOneToOne: false;
+            referencedRelation: 'pricing_tiers';
+            referencedColumns: ['tier'];
+          },
+        ];
+      };
       vendor_emails: {
         Row: {
           attachment_urls: Json | null;
@@ -1145,12 +1812,188 @@ export type Database = {
           },
         ];
       };
+      vendor_invoice_line_boxes: {
+        Row: {
+          box_id: string;
+          vendor_invoice_line_id: string;
+        };
+        Insert: {
+          box_id: string;
+          vendor_invoice_line_id: string;
+        };
+        Update: {
+          box_id?: string;
+          vendor_invoice_line_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'vendor_invoice_line_boxes_box_id_fkey';
+            columns: ['box_id'];
+            isOneToOne: false;
+            referencedRelation: 'boxes';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'vendor_invoice_line_boxes_vendor_invoice_line_id_fkey';
+            columns: ['vendor_invoice_line_id'];
+            isOneToOne: false;
+            referencedRelation: 'vendor_invoice_lines';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      vendor_invoice_lines: {
+        Row: {
+          amount: number | null;
+          carton_numbers: number[] | null;
+          carton_ref_raw: string | null;
+          created_at: string;
+          description: string | null;
+          grade: string | null;
+          id: string;
+          line_no: number | null;
+          manual_overrides: Json;
+          pieces: number | null;
+          species: string | null;
+          unit_price_lb: number | null;
+          vendor_invoice_id: string;
+          weight_lb: number | null;
+        };
+        Insert: {
+          amount?: number | null;
+          carton_numbers?: number[] | null;
+          carton_ref_raw?: string | null;
+          created_at?: string;
+          description?: string | null;
+          grade?: string | null;
+          id?: string;
+          line_no?: number | null;
+          manual_overrides?: Json;
+          pieces?: number | null;
+          species?: string | null;
+          unit_price_lb?: number | null;
+          vendor_invoice_id: string;
+          weight_lb?: number | null;
+        };
+        Update: {
+          amount?: number | null;
+          carton_numbers?: number[] | null;
+          carton_ref_raw?: string | null;
+          created_at?: string;
+          description?: string | null;
+          grade?: string | null;
+          id?: string;
+          line_no?: number | null;
+          manual_overrides?: Json;
+          pieces?: number | null;
+          species?: string | null;
+          unit_price_lb?: number | null;
+          vendor_invoice_id?: string;
+          weight_lb?: number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'vendor_invoice_lines_vendor_invoice_id_fkey';
+            columns: ['vendor_invoice_id'];
+            isOneToOne: false;
+            referencedRelation: 'vendor_invoices';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      vendor_invoices: {
+        Row: {
+          awb: string | null;
+          created_at: string;
+          currency: string;
+          document_id: string | null;
+          entity: Database['public']['Enums']['operating_entity'];
+          id: string;
+          invoice_date: string | null;
+          invoice_no: string;
+          manual_overrides: Json;
+          shipment_from: string | null;
+          shipment_id: string | null;
+          sold_to: string | null;
+          status: Database['public']['Enums']['vendor_invoice_status'];
+          subtotal: number | null;
+          terms: string | null;
+          total: number;
+          vendor_id: string;
+        };
+        Insert: {
+          awb?: string | null;
+          created_at?: string;
+          currency?: string;
+          document_id?: string | null;
+          entity?: Database['public']['Enums']['operating_entity'];
+          id?: string;
+          invoice_date?: string | null;
+          invoice_no: string;
+          manual_overrides?: Json;
+          shipment_from?: string | null;
+          shipment_id?: string | null;
+          sold_to?: string | null;
+          status?: Database['public']['Enums']['vendor_invoice_status'];
+          subtotal?: number | null;
+          terms?: string | null;
+          total?: number;
+          vendor_id: string;
+        };
+        Update: {
+          awb?: string | null;
+          created_at?: string;
+          currency?: string;
+          document_id?: string | null;
+          entity?: Database['public']['Enums']['operating_entity'];
+          id?: string;
+          invoice_date?: string | null;
+          invoice_no?: string;
+          manual_overrides?: Json;
+          shipment_from?: string | null;
+          shipment_id?: string | null;
+          sold_to?: string | null;
+          status?: Database['public']['Enums']['vendor_invoice_status'];
+          subtotal?: number | null;
+          terms?: string | null;
+          total?: number;
+          vendor_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'vendor_invoices_document_id_fkey';
+            columns: ['document_id'];
+            isOneToOne: false;
+            referencedRelation: 'documents';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'vendor_invoices_shipment_id_fkey';
+            columns: ['shipment_id'];
+            isOneToOne: false;
+            referencedRelation: 'shipments';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'vendor_invoices_vendor_id_fkey';
+            columns: ['vendor_id'];
+            isOneToOne: false;
+            referencedRelation: 'vendors';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
       vendor_mappings: {
         Row: {
           box_col: string;
+          box_type_col: string | null;
           created_at: string;
+          doc_type: Database['public']['Enums']['document_kind'];
           grade_col: string | null;
+          ice_col: string | null;
           id: string;
+          net_kg_col: string | null;
+          pieces_col: string | null;
           species_col: string;
           uom: string;
           vendor_id: string;
@@ -1158,9 +2001,14 @@ export type Database = {
         };
         Insert: {
           box_col: string;
+          box_type_col?: string | null;
           created_at?: string;
+          doc_type?: Database['public']['Enums']['document_kind'];
           grade_col?: string | null;
+          ice_col?: string | null;
           id?: string;
+          net_kg_col?: string | null;
+          pieces_col?: string | null;
           species_col: string;
           uom?: string;
           vendor_id: string;
@@ -1168,9 +2016,14 @@ export type Database = {
         };
         Update: {
           box_col?: string;
+          box_type_col?: string | null;
           created_at?: string;
+          doc_type?: Database['public']['Enums']['document_kind'];
           grade_col?: string | null;
+          ice_col?: string | null;
           id?: string;
+          net_kg_col?: string | null;
+          pieces_col?: string | null;
           species_col?: string;
           uom?: string;
           vendor_id?: string;
@@ -1180,7 +2033,7 @@ export type Database = {
           {
             foreignKeyName: 'vendor_mappings_vendor_id_fkey';
             columns: ['vendor_id'];
-            isOneToOne: true;
+            isOneToOne: false;
             referencedRelation: 'vendors';
             referencedColumns: ['id'];
           },
@@ -1285,6 +2138,28 @@ export type Database = {
       };
     };
     Views: {
+      ap_aging: {
+        Row: {
+          current_due: number | null;
+          d1_30: number | null;
+          d31_60: number | null;
+          d61_90: number | null;
+          d90_plus: number | null;
+          entity: Database['public']['Enums']['operating_entity'] | null;
+          total_open: number | null;
+          vendor: string | null;
+          vendor_id: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'ap_bills_vendor_id_fkey';
+            columns: ['vendor_id'];
+            isOneToOne: false;
+            referencedRelation: 'vendors';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
       availability_by_species: {
         Row: {
           allocated_lb: number | null;
@@ -1359,39 +2234,67 @@ export type Database = {
       };
     };
     Functions: {
+      add_role: {
+        Args: {
+          p_bg?: string;
+          p_color?: string;
+          p_description?: string;
+          p_key: string;
+          p_label: string;
+        };
+        Returns: {
+          assignable: boolean;
+          bg: string;
+          color: string;
+          created_at: string;
+          description: string | null;
+          is_system: boolean;
+          key: string;
+          label: string;
+          sort: number;
+        };
+        SetofOptions: {
+          from: '*';
+          to: 'roles';
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      app_customer_id: { Args: never; Returns: string };
       app_role: {
         Args: never;
         Returns: Database['public']['Enums']['user_role'];
       };
-      app_customer_id: { Args: never; Returns: string | null };
       lock_board: { Args: { p_location: string }; Returns: Json };
       unlock_board: { Args: { p_location: string }; Returns: Json };
-      add_role: {
-        Args: {
-          p_key: string;
-          p_label: string;
-          p_description?: string;
-          p_color?: string;
-          p_bg?: string;
-        };
-        Returns: Database['public']['Tables']['roles']['Row'];
-      };
     };
     Enums: {
+      ap_bill_status: 'draft' | 'pending_sync' | 'synced' | 'partially_paid' | 'paid' | 'void';
       box_part: 'A' | 'B';
       claim_status: 'open' | 'approved' | 'countered' | 'rejected';
       customer_status: 'active' | 'inactive';
       customer_tier: 'T1' | 'T2' | 'T3';
+      document_kind:
+        | 'commercial_invoice'
+        | 'packing_list'
+        | 'vendor_statement'
+        | 'po_import'
+        | 'other';
       downgrade_status: 'pending' | 'applied' | 'disputed';
+      freight_mode: 'trucker' | 'air' | 'customer_pickup';
       integration_provider: 'qbo' | 'gmail';
       invoice_status: 'pending' | 'failed' | 'synced';
       lot_status: 'incoming' | 'received' | 'available' | 'allocated' | 'shipped';
       notif_type: 'shortage' | 'sync' | 'approval' | 'credit' | 'receiving' | 'shipment';
+      operating_entity: 'MANA' | 'EOF';
       order_status: 'open' | 'allocated' | 'locked' | 'shipped' | 'invoiced';
       parse_status: 'pending' | 'parsed' | 'needs_review' | 'posted';
+      po_bill_status: 'not_billed' | 'partially_billed' | 'billed';
+      shipment_routing: 'warehouse' | 'direct';
       statement_status: 'draft' | 'sent' | 'countered' | 'settled';
       user_role: 'admin' | 'operations' | 'finance' | 'sales' | 'logistics' | 'viewer' | 'customer';
       user_status: 'active' | 'invited' | 'inactive';
+      vendor_invoice_status: 'draft' | 'parsed' | 'needs_review' | 'approved' | 'billed' | 'void';
     };
     CompositeTypes: {
       [_ in never]: never;
@@ -1517,20 +2420,33 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      ap_bill_status: ['draft', 'pending_sync', 'synced', 'partially_paid', 'paid', 'void'],
       box_part: ['A', 'B'],
       claim_status: ['open', 'approved', 'countered', 'rejected'],
       customer_status: ['active', 'inactive'],
       customer_tier: ['T1', 'T2', 'T3'],
+      document_kind: [
+        'commercial_invoice',
+        'packing_list',
+        'vendor_statement',
+        'po_import',
+        'other',
+      ],
       downgrade_status: ['pending', 'applied', 'disputed'],
+      freight_mode: ['trucker', 'air', 'customer_pickup'],
       integration_provider: ['qbo', 'gmail'],
       invoice_status: ['pending', 'failed', 'synced'],
       lot_status: ['incoming', 'received', 'available', 'allocated', 'shipped'],
       notif_type: ['shortage', 'sync', 'approval', 'credit', 'receiving', 'shipment'],
+      operating_entity: ['MANA', 'EOF'],
       order_status: ['open', 'allocated', 'locked', 'shipped', 'invoiced'],
       parse_status: ['pending', 'parsed', 'needs_review', 'posted'],
+      po_bill_status: ['not_billed', 'partially_billed', 'billed'],
+      shipment_routing: ['warehouse', 'direct'],
       statement_status: ['draft', 'sent', 'countered', 'settled'],
-      user_role: ['admin', 'operations', 'finance', 'sales', 'logistics', 'viewer'],
+      user_role: ['admin', 'operations', 'finance', 'sales', 'logistics', 'viewer', 'customer'],
       user_status: ['active', 'invited', 'inactive'],
+      vendor_invoice_status: ['draft', 'parsed', 'needs_review', 'approved', 'billed', 'void'],
     },
   },
 } as const;
