@@ -1,13 +1,36 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Nav from '../components/Nav';
+import { createClient } from '@/lib/supabase/client';
 
 interface PriceOverride {
   sku: string;
   species: string;
   price: number;
   effectiveFrom: string;
+}
+
+// Shape of a customers row (+ nested price_overrides) as read from Supabase.
+interface DbCustomer {
+  id: string;
+  name: string;
+  contact: string | null;
+  phone: string | null;
+  email: string | null;
+  tier: 'T1' | 'T2' | 'T3' | null;
+  default_carrier: string | null;
+  terms: string | null;
+  location: string | null;
+  standing_order: string | null;
+  channel_pref: string | null;
+  status: 'active' | 'inactive' | null;
+  price_overrides?: {
+    sku: string;
+    species: string | null;
+    price: number;
+    effective_from: string | null;
+  }[];
 }
 
 interface Customer {
@@ -32,82 +55,28 @@ const TIER_META: Record<Customer['tier'], { label: string; color: string; bg: st
   T3: { label: 'Tier 3 — COD', color: '#8A5A14', bg: '#F4EEE2' },
 };
 
-const SEED: Customer[] = [
-  {
-    id: 'c1',
-    name: 'Nobu',
-    contact: 'Nobu Matsuhisa',
-    phone: '(415) 555-0188',
-    email: 'orders@nobu-sf.com',
-    tier: 'T1',
-    defaultCarrier: 'Main Freight',
-    terms: 'Net 15',
-    location: 'SFO',
-    standingOrder: 'Mon/Thu — Ahi A+, 40 lb',
-    channelPref: 'Phone',
-    status: 'active',
-    overrides: [
-      { sku: 'AHI-A+', species: 'Ahi Tuna A+', price: 24.5, effectiveFrom: 'Jun 1, 2026' },
-    ],
-  },
-  {
-    id: 'c2',
-    name: 'Morimoto',
-    contact: 'M. Kitchen',
-    phone: '(415) 555-0204',
-    email: 'purchasing@morimoto.com',
-    tier: 'T1',
-    defaultCarrier: 'Main Freight',
-    terms: 'Net 15',
-    location: 'SFO',
-    standingOrder: 'Wed — Salmon A, 30 lb',
-    channelPref: 'Email',
-    status: 'active',
-    overrides: [],
-  },
-  {
-    id: 'c3',
-    name: "Roy's",
-    contact: 'Roy Yamaguchi',
-    phone: '(310) 555-0142',
-    email: 'kitchen@roys.com',
-    tier: 'T2',
-    defaultCarrier: 'Gold Coast 3PL',
-    terms: 'Net 30',
-    location: 'LAX',
-    channelPref: 'Text',
-    status: 'active',
-    overrides: [{ sku: 'ONO-A', species: 'Ono A', price: 17.0, effectiveFrom: 'May 15, 2026' }],
-  },
-  {
-    id: 'c4',
-    name: "Alan Wong's",
-    contact: 'Alan Wong',
-    phone: '(808) 555-0190',
-    email: 'orders@alanwongs.com',
-    tier: 'T2',
-    defaultCarrier: 'Island Air Cargo',
-    terms: 'Net 30',
-    location: 'LAX',
-    channelPref: 'Phone',
-    status: 'active',
-    overrides: [],
-  },
-  {
-    id: 'c5',
-    name: "Tiki's Grill",
-    contact: 'Front desk',
-    phone: '(808) 555-0233',
-    email: 'tikis@grill.com',
-    tier: 'T3',
-    defaultCarrier: 'Customer pickup',
-    terms: 'COD',
-    location: 'SFO',
-    channelPref: 'Phone',
-    status: 'inactive',
-    overrides: [],
-  },
-];
+function mapCustomer(c: DbCustomer): Customer {
+  return {
+    id: c.id,
+    name: c.name,
+    contact: c.contact ?? '',
+    phone: c.phone ?? '',
+    email: c.email ?? '',
+    tier: c.tier ?? 'T2',
+    defaultCarrier: c.default_carrier ?? '—',
+    terms: c.terms ?? '—',
+    location: c.location ?? '—',
+    standingOrder: c.standing_order ?? undefined,
+    channelPref: c.channel_pref ?? 'Phone',
+    status: c.status ?? 'active',
+    overrides: (c.price_overrides ?? []).map((o) => ({
+      sku: o.sku,
+      species: o.species ?? o.sku,
+      price: Number(o.price),
+      effectiveFrom: o.effective_from ?? '—',
+    })),
+  };
+}
 
 type FormState = {
   name: string;
@@ -136,7 +105,9 @@ const EMPTY_FORM: FormState = {
 };
 
 export default function CustomersPage() {
-  const [customers, setCustomers] = useState<Customer[]>(SEED);
+  const supabase = createClient();
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editor, setEditor] = useState<{ open: boolean; editingId: string | null }>({
@@ -144,9 +115,23 @@ export default function CustomersPage() {
     editingId: null,
   });
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState('');
+
+  async function fetchAll() {
+    setLoading(true);
+    const { data } = await supabase.from('customers').select('*, price_overrides(*)').order('name');
+    setCustomers(((data ?? []) as unknown as DbCustomer[]).map(mapCustomer));
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    fetchAll();
+  }, []);
 
   const openNew = () => {
     setForm(EMPTY_FORM);
+    setFormError('');
     setEditor({ open: true, editingId: null });
   };
 
@@ -167,28 +152,37 @@ export default function CustomersPage() {
     setSelectedId(null);
   };
 
-  const saveCustomer = () => {
-    if (!form.name.trim()) return;
-    if (editor.editingId) {
-      setCustomers((prev) =>
-        prev.map((c) =>
-          c.id === editor.editingId
-            ? { ...c, ...form, standingOrder: form.standingOrder || undefined }
-            : c
-        )
+  const saveCustomer = async () => {
+    if (!form.name.trim() || saving) return;
+    setSaving(true);
+    setFormError('');
+    const payload = {
+      name: form.name.trim(),
+      contact: form.contact || null,
+      phone: form.phone || null,
+      email: form.email || null,
+      tier: form.tier,
+      default_carrier: form.defaultCarrier || null,
+      terms: form.terms || null,
+      location: form.location || null,
+      standing_order: form.standingOrder || null,
+      channel_pref: form.channelPref || null,
+    };
+    const { error } = editor.editingId
+      ? await supabase.from('customers').update(payload).eq('id', editor.editingId)
+      : await supabase.from('customers').insert({ ...payload, status: 'active' });
+    setSaving(false);
+    if (error) {
+      setFormError(
+        error.message.includes('duplicate')
+          ? `A customer named "${form.name.trim()}" already exists.`
+          : error.message
       );
-    } else {
-      const newCustomer: Customer = {
-        id: 'c' + Date.now(),
-        ...form,
-        standingOrder: form.standingOrder || undefined,
-        status: 'active',
-        overrides: [],
-      };
-      setCustomers((prev) => [newCustomer, ...prev]);
+      return;
     }
     setEditor({ open: false, editingId: null });
     setForm(EMPTY_FORM);
+    fetchAll();
   };
 
   const filtered = customers.filter((c) =>
@@ -409,6 +403,22 @@ export default function CustomersPage() {
                 </div>
               );
             })}
+            {(loading || filtered.length === 0) && (
+              <div
+                style={{
+                  padding: '26px 18px',
+                  textAlign: 'center',
+                  fontSize: '13px',
+                  color: '#8A99A3',
+                }}
+              >
+                {loading
+                  ? 'Loading customers…'
+                  : customers.length === 0
+                    ? 'No customers yet. Add one here, or create an order for a new customer in Order Intake.'
+                    : 'No customers match your search.'}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -894,10 +904,23 @@ export default function CustomersPage() {
                 background: '#fff',
                 borderTop: '1px solid #E2E6E9',
                 display: 'flex',
+                alignItems: 'center',
                 justifyContent: 'flex-end',
                 gap: '10px',
               }}
             >
+              {formError && (
+                <span
+                  style={{
+                    flex: 1,
+                    fontSize: '12px',
+                    color: '#A5362C',
+                    lineHeight: 1.4,
+                  }}
+                >
+                  {formError}
+                </span>
+              )}
               <button
                 onClick={() => setEditor({ open: false, editingId: null })}
                 style={{
@@ -916,19 +939,20 @@ export default function CustomersPage() {
               </button>
               <button
                 onClick={saveCustomer}
+                disabled={saving || !form.name.trim()}
                 style={{
                   fontFamily: "'Archivo', sans-serif",
                   fontSize: '13px',
                   fontWeight: 600,
-                  background: '#222A30',
+                  background: saving || !form.name.trim() ? '#8A99A3' : '#222A30',
                   color: '#fff',
                   border: 'none',
                   borderRadius: '5px',
                   padding: '10px 18px',
-                  cursor: 'pointer',
+                  cursor: saving || !form.name.trim() ? 'not-allowed' : 'pointer',
                 }}
               >
-                {editor.editingId ? 'Save changes' : 'Create customer'}
+                {saving ? 'Saving…' : editor.editingId ? 'Save changes' : 'Create customer'}
               </button>
             </div>
           </div>

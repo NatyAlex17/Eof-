@@ -3,6 +3,11 @@
 import { useState, useEffect } from 'react';
 import Nav from '../components/Nav';
 import { createClient } from '@/lib/supabase/client';
+import type { Database } from '@/lib/database.types';
+
+// Roles can be added at runtime (extends the enum), so the generated enum type
+// is a subset. Cast writes through this alias where a role string is stored.
+type RoleValue = Database['public']['Enums']['user_role'];
 
 type AdminTab = 'users' | 'sku' | 'pricing' | 'mappings' | 'integrations';
 
@@ -10,10 +15,19 @@ interface Profile {
   id: string;
   name: string;
   email: string;
-  role: 'admin' | 'operations' | 'finance' | 'sales' | 'logistics' | 'viewer';
+  role: string;
   location: string | null;
   status: 'active' | 'invited' | 'inactive';
   last_seen: string | null;
+}
+
+interface RoleDef {
+  key: string;
+  label: string;
+  description: string | null;
+  color: string;
+  bg: string;
+  is_system: boolean;
 }
 
 interface SKU {
@@ -36,17 +50,68 @@ interface PricingTier {
   customers: string[];
 }
 
-const ROLES: Profile['role'][] = ['admin', 'operations', 'finance', 'sales', 'logistics', 'viewer'];
+// Fallback used until the roles table loads (and if it's empty). Mirrors the
+// seed in 20260710100001_roles.sql so the UI looks identical either way.
+const DEFAULT_ROLES: RoleDef[] = [
+  {
+    key: 'admin',
+    label: 'Admin',
+    description: 'Full access · manage users, settings, integrations',
+    color: '#2D5365',
+    bg: '#EEF3F6',
+    is_system: true,
+  },
+  {
+    key: 'operations',
+    label: 'Operations',
+    description: 'Inventory, allocation, receiving, pick slips',
+    color: '#2E6347',
+    bg: '#EAF1ED',
+    is_system: true,
+  },
+  {
+    key: 'finance',
+    label: 'Finance',
+    description: 'Finance queue, credits, vendor reconciliation',
+    color: '#8A5A14',
+    bg: '#F4EEE2',
+    is_system: true,
+  },
+  {
+    key: 'sales',
+    label: 'Sales',
+    description: 'Order intake, customer management',
+    color: '#5A3E6B',
+    bg: '#F0ECF6',
+    is_system: true,
+  },
+  {
+    key: 'logistics',
+    label: 'Logistics',
+    description: 'Pick slips, shipments, BOL workflow',
+    color: '#5A6670',
+    bg: '#EEF0F2',
+    is_system: true,
+  },
+  {
+    key: 'viewer',
+    label: 'Viewer',
+    description: 'Read-only access to all modules',
+    color: '#8A99A3',
+    bg: '#F4F5F6',
+    is_system: true,
+  },
+];
 
-const roleMeta = (r: Profile['role']) =>
-  ({
-    admin: { label: 'Admin', color: '#2D5365', bg: '#EEF3F6' },
-    operations: { label: 'Operations', color: '#2E6347', bg: '#EAF1ED' },
-    finance: { label: 'Finance', color: '#8A5A14', bg: '#F4EEE2' },
-    sales: { label: 'Sales', color: '#5A3E6B', bg: '#F0ECF6' },
-    logistics: { label: 'Logistics', color: '#5A6670', bg: '#EEF0F2' },
-    viewer: { label: 'Viewer', color: '#8A99A3', bg: '#F4F5F6' },
-  })[r];
+// A palette offered when creating a custom role.
+const ROLE_PALETTE = [
+  { color: '#2D5365', bg: '#EEF3F6' },
+  { color: '#2E6347', bg: '#EAF1ED' },
+  { color: '#8A5A14', bg: '#F4EEE2' },
+  { color: '#5A3E6B', bg: '#F0ECF6' },
+  { color: '#A5362C', bg: '#FBF0EF' },
+  { color: '#5A6670', bg: '#EEF0F2' },
+];
 
 const statusMeta = (s: Profile['status']) =>
   ({
@@ -88,10 +153,40 @@ export default function AdminPage() {
   const [inviteForm, setInviteForm] = useState({
     name: '',
     email: '',
-    role: 'viewer' as Profile['role'],
+    role: 'viewer' as string,
     location: '',
   });
   const [inviting, setInviting] = useState(false);
+  const [inviteError, setInviteError] = useState('');
+  // credentials shown once after a user is created (email + generated password)
+  const [createdCreds, setCreatedCreds] = useState<{ email: string; password: string } | null>(
+    null
+  );
+  const [copied, setCopied] = useState<string | null>(null);
+
+  // Roles registry (DB-backed; falls back to the 6 built-ins until it loads)
+  const [roleDefs, setRoleDefs] = useState<RoleDef[]>(DEFAULT_ROLES);
+  const ROLES = roleDefs.map((r) => r.key);
+  const roleMeta = (r: string) => {
+    const found = roleDefs.find((d) => d.key === r);
+    return (
+      found ?? {
+        key: r,
+        label: r ? r[0].toUpperCase() + r.slice(1) : r,
+        description: null,
+        color: '#5A6670',
+        bg: '#EEF0F2',
+        is_system: false,
+      }
+    );
+  };
+  const [roleModal, setRoleModal] = useState<{
+    label: string;
+    description: string;
+    paletteIdx: number;
+  } | null>(null);
+  const [savingRoleDef, setSavingRoleDef] = useState(false);
+  const [roleDefError, setRoleDefError] = useState('');
 
   // SKUs
   const [skus, setSkus] = useState<SKU[]>([]);
@@ -281,6 +376,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     fetchUsers();
+    fetchRoles();
     fetchSkus();
     fetchTiers();
     fetchTierPrices();
@@ -292,6 +388,42 @@ export default function AdminPage() {
     setUsers((data as Profile[]) ?? []);
     setUsersLoading(false);
   }
+
+  async function fetchRoles() {
+    const { data } = await supabase.from('roles').select('*').order('sort');
+    if (data && data.length > 0) setRoleDefs(data as RoleDef[]);
+  }
+
+  const copyText = async (text: string, key: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(key);
+      setTimeout(() => setCopied((c) => (c === key ? null : c)), 1600);
+    } catch {
+      /* clipboard unavailable — no-op */
+    }
+  };
+
+  const saveRoleDef = async () => {
+    if (!roleModal || !roleModal.label.trim()) return;
+    setSavingRoleDef(true);
+    setRoleDefError('');
+    const pal = ROLE_PALETTE[roleModal.paletteIdx] ?? ROLE_PALETTE[0];
+    const { error } = await supabase.rpc('add_role', {
+      p_key: roleModal.label,
+      p_label: roleModal.label.trim(),
+      p_description: roleModal.description.trim() || undefined,
+      p_color: pal.color,
+      p_bg: pal.bg,
+    });
+    setSavingRoleDef(false);
+    if (error) {
+      setRoleDefError(error.message);
+      return;
+    }
+    setRoleModal(null);
+    fetchRoles();
+  };
 
   async function fetchSkus() {
     setSkusLoading(true);
@@ -326,7 +458,10 @@ export default function AdminPage() {
   const applyRole = async () => {
     if (!assignModal.userId) return;
     setSavingRole(true);
-    await supabase.from('profiles').update({ role: selectedRole }).eq('id', assignModal.userId);
+    await supabase
+      .from('profiles')
+      .update({ role: selectedRole as RoleValue })
+      .eq('id', assignModal.userId);
     setUsers((prev) =>
       prev.map((u) => (u.id === assignModal.userId ? { ...u, role: selectedRole } : u))
     );
@@ -337,17 +472,28 @@ export default function AdminPage() {
   const sendInvite = async () => {
     if (!inviteForm.name || !inviteForm.email) return;
     setInviting(true);
+    setInviteError('');
     const res = await fetch('/api/admin/invite', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(inviteForm),
     });
+    const body = await res.json().catch(() => ({}));
     setInviting(false);
-    if (res.ok) {
-      setInviteForm({ name: '', email: '', role: 'viewer', location: '' });
-      setInviteDrawer(false);
+    if (res.ok && body.password) {
+      // Show the generated credentials once; the admin copies + hands them over.
+      setCreatedCreds({ email: body.email, password: body.password });
       fetchUsers();
+    } else {
+      setInviteError(body.error || 'Could not create the user.');
     }
+  };
+
+  const closeInviteDrawer = () => {
+    setInviteDrawer(false);
+    setCreatedCreds(null);
+    setInviteError('');
+    setInviteForm({ name: '', email: '', role: 'viewer', location: '' });
   };
 
   const tabStyle = (on: boolean): React.CSSProperties => ({
@@ -445,37 +591,77 @@ export default function AdminPage() {
           </div>
 
           {tab === 'users' && (
-            <button
-              onClick={() => setInviteDrawer(true)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '7px',
-                fontFamily: "'Archivo', sans-serif",
-                fontSize: '13px',
-                fontWeight: 600,
-                background: '#222A30',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '5px',
-                padding: '9px 15px',
-                cursor: 'pointer',
-              }}
-            >
-              <svg
-                width="13"
-                height="13"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <button
+                onClick={() => {
+                  setRoleDefError('');
+                  setRoleModal({ label: '', description: '', paletteIdx: 0 });
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '7px',
+                  fontFamily: "'Archivo', sans-serif",
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  background: '#fff',
+                  color: '#3F6F86',
+                  border: '1px solid #C5D8E2',
+                  borderRadius: '5px',
+                  padding: '9px 14px',
+                  cursor: 'pointer',
+                }}
               >
-                <line x1="12" y1="5" x2="12" y2="19" />
-                <line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
-              Invite user
-            </button>
+                <svg
+                  width="13"
+                  height="13"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                >
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+                Add role
+              </button>
+              <button
+                onClick={() => {
+                  setCreatedCreds(null);
+                  setInviteError('');
+                  setInviteDrawer(true);
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '7px',
+                  fontFamily: "'Archivo', sans-serif",
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  background: '#222A30',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '5px',
+                  padding: '9px 15px',
+                  cursor: 'pointer',
+                }}
+              >
+                <svg
+                  width="13"
+                  height="13"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                >
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+                Add user
+              </button>
+            </div>
           )}
           {tab === 'sku' && (
             <button
@@ -530,6 +716,91 @@ export default function AdminPage() {
                     ? 'Loading…'
                     : `${users.filter((u) => u.status === 'active').length} active · ${users.filter((u) => u.status === 'invited').length} invited`}
                 </span>
+              </div>
+
+              {/* ROLES IN THE SYSTEM — the assignable set; add via "Add role" */}
+              <div
+                style={{
+                  background: '#fff',
+                  border: '1px solid #E2E6E9',
+                  borderRadius: '8px',
+                  padding: '14px 16px',
+                  marginBottom: '16px',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'baseline',
+                    justifyContent: 'space-between',
+                    marginBottom: '10px',
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      letterSpacing: '0.06em',
+                      color: '#8A99A3',
+                    }}
+                  >
+                    ROLES IN THE SYSTEM
+                  </span>
+                  <span style={{ fontSize: '11px', color: '#8A99A3' }}>
+                    {roleDefs.length} roles · used in Assign role &amp; Add user
+                  </span>
+                </div>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  {roleDefs.map((r) => (
+                    <span
+                      key={r.key}
+                      title={r.description || undefined}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        color: r.color,
+                        background: r.bg,
+                        borderRadius: '4px',
+                        padding: '5px 11px',
+                      }}
+                    >
+                      {r.label}
+                      {!r.is_system && (
+                        <span
+                          style={{
+                            fontSize: '9px',
+                            fontWeight: 700,
+                            letterSpacing: '0.05em',
+                            color: '#8A99A3',
+                          }}
+                        >
+                          CUSTOM
+                        </span>
+                      )}
+                    </span>
+                  ))}
+                  <button
+                    onClick={() => {
+                      setRoleDefError('');
+                      setRoleModal({ label: '', description: '', paletteIdx: 0 });
+                    }}
+                    style={{
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      color: '#8A99A3',
+                      background: 'none',
+                      border: '1px dashed #D6DCE0',
+                      borderRadius: '4px',
+                      padding: '5px 11px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    + Add role
+                  </button>
+                </div>
               </div>
               <div
                 style={{
@@ -1529,16 +1800,7 @@ export default function AdminPage() {
                         {m.label}
                       </div>
                       <div style={{ fontSize: '11px', color: '#8A99A3', marginTop: '1px' }}>
-                        {
-                          {
-                            admin: 'Full access · manage users, settings, integrations',
-                            operations: 'Inventory, allocation, receiving, pick slips',
-                            finance: 'Finance queue, credits, vendor reconciliation',
-                            sales: 'Order intake, customer management',
-                            logistics: 'Pick slips, shipments, BOL workflow',
-                            viewer: 'Read-only access to all modules',
-                          }[r]
-                        }
+                        {m.description}
                       </div>
                     </div>
                   </button>
@@ -1591,7 +1853,7 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* INVITE USER DRAWER */}
+      {/* ADD USER DRAWER — creates the account + generates a first password */}
       {inviteDrawer && (
         <div
           style={{
@@ -1602,7 +1864,7 @@ export default function AdminPage() {
             justifyContent: 'flex-end',
             zIndex: 50,
           }}
-          onClick={() => setInviteDrawer(false)}
+          onClick={closeInviteDrawer}
         >
           <div
             style={{
@@ -1628,7 +1890,7 @@ export default function AdminPage() {
             >
               <div>
                 <div style={{ fontSize: '16px', fontWeight: 700, letterSpacing: '-0.01em' }}>
-                  Invite user
+                  {createdCreds ? 'User created' : 'Add user'}
                 </div>
                 <div
                   style={{
@@ -1638,11 +1900,13 @@ export default function AdminPage() {
                     marginTop: '3px',
                   }}
                 >
-                  An email invitation will be sent
+                  {createdCreds
+                    ? 'Copy the password and share it securely'
+                    : 'A password is generated automatically'}
                 </div>
               </div>
               <button
-                onClick={() => setInviteDrawer(false)}
+                onClick={closeInviteDrawer}
                 style={{
                   fontSize: '20px',
                   background: 'none',
@@ -1655,73 +1919,401 @@ export default function AdminPage() {
                 ×
               </button>
             </div>
-            <div
-              style={{
-                flex: 1,
-                overflowY: 'auto',
-                padding: '20px 24px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '16px',
-              }}
-            >
-              <div>
-                <label style={labelStyle}>FULL NAME *</label>
-                <input
-                  style={inputStyle}
-                  placeholder="e.g. Sales — LAX"
-                  value={inviteForm.name}
-                  onChange={(e) => setInviteForm((f) => ({ ...f, name: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label style={labelStyle}>EMAIL *</label>
-                <input
-                  style={inputStyle}
-                  type="email"
-                  placeholder="user@eof.com"
-                  value={inviteForm.email}
-                  onChange={(e) => setInviteForm((f) => ({ ...f, email: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label style={labelStyle}>ROLE</label>
-                <select
-                  style={inputStyle}
-                  value={inviteForm.role}
-                  onChange={(e) =>
-                    setInviteForm((f) => ({ ...f, role: e.target.value as Profile['role'] }))
-                  }
+
+            {createdCreds ? (
+              /* SUCCESS — show credentials once, with copy buttons */
+              <>
+                <div
+                  style={{
+                    flex: 1,
+                    overflowY: 'auto',
+                    padding: '20px 24px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '16px',
+                  }}
                 >
-                  {ROLES.map((r) => (
-                    <option key={r} value={r}>
-                      {roleMeta(r).label}
-                    </option>
+                  <div
+                    style={{
+                      background: '#EAF1ED',
+                      border: '1px solid #B4D2C0',
+                      borderRadius: '6px',
+                      padding: '12px 14px',
+                      fontSize: '12px',
+                      color: '#2E6347',
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    Account is active. Give these credentials to the user — they can sign in now and
+                    change the password under <strong>Settings</strong>. This password won&apos;t be
+                    shown again.
+                  </div>
+
+                  {(
+                    [
+                      ['EMAIL', createdCreds.email, 'email'],
+                      ['TEMPORARY PASSWORD', createdCreds.password, 'password'],
+                    ] as [string, string, string][]
+                  ).map(([label, value, key]) => (
+                    <div key={key}>
+                      <label style={labelStyle}>{label}</label>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <div
+                          style={{
+                            ...inputStyle,
+                            fontFamily: "'IBM Plex Mono', monospace",
+                            display: 'flex',
+                            alignItems: 'center',
+                            userSelect: 'all',
+                          }}
+                        >
+                          {value}
+                        </div>
+                        <button
+                          onClick={() => copyText(value, key)}
+                          style={{
+                            fontFamily: "'Archivo', sans-serif",
+                            fontSize: '12px',
+                            fontWeight: 600,
+                            background: copied === key ? '#2E6347' : '#fff',
+                            color: copied === key ? '#fff' : '#3F6F86',
+                            border: `1px solid ${copied === key ? '#2E6347' : '#C5D8E2'}`,
+                            borderRadius: '5px',
+                            padding: '0 14px',
+                            cursor: 'pointer',
+                            flex: 'none',
+                          }}
+                        >
+                          {copied === key ? 'Copied' : 'Copy'}
+                        </button>
+                      </div>
+                    </div>
                   ))}
-                </select>
+
+                  <button
+                    onClick={() =>
+                      copyText(
+                        `Email: ${createdCreds.email}\nPassword: ${createdCreds.password}`,
+                        'both'
+                      )
+                    }
+                    style={{
+                      fontFamily: "'Archivo', sans-serif",
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      background: copied === 'both' ? '#2E6347' : '#EEF3F6',
+                      color: copied === 'both' ? '#fff' : '#3F6F86',
+                      border: `1px solid ${copied === 'both' ? '#2E6347' : '#C5D8E2'}`,
+                      borderRadius: '5px',
+                      padding: '9px 14px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {copied === 'both' ? 'Copied both' : 'Copy email + password'}
+                  </button>
+                </div>
+                <div
+                  style={{
+                    padding: '16px 24px',
+                    background: '#fff',
+                    borderTop: '1px solid #E2E6E9',
+                    display: 'flex',
+                    justifyContent: 'flex-end',
+                    gap: '10px',
+                  }}
+                >
+                  <button
+                    onClick={() => {
+                      setCreatedCreds(null);
+                      setInviteError('');
+                      setInviteForm({ name: '', email: '', role: 'viewer', location: '' });
+                    }}
+                    style={{
+                      fontFamily: "'Archivo', sans-serif",
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      background: '#fff',
+                      color: '#5A6670',
+                      border: '1px solid #D6DCE0',
+                      borderRadius: '5px',
+                      padding: '10px 16px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Add another
+                  </button>
+                  <button
+                    onClick={closeInviteDrawer}
+                    style={{
+                      fontFamily: "'Archivo', sans-serif",
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      background: '#222A30',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: '5px',
+                      padding: '10px 18px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Done
+                  </button>
+                </div>
+              </>
+            ) : (
+              /* FORM */
+              <>
+                <div
+                  style={{
+                    flex: 1,
+                    overflowY: 'auto',
+                    padding: '20px 24px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '16px',
+                  }}
+                >
+                  <div>
+                    <label style={labelStyle}>FULL NAME *</label>
+                    <input
+                      style={inputStyle}
+                      placeholder="e.g. Sales — LAX"
+                      value={inviteForm.name}
+                      onChange={(e) => setInviteForm((f) => ({ ...f, name: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>EMAIL *</label>
+                    <input
+                      style={inputStyle}
+                      type="email"
+                      placeholder="user@eof.com"
+                      value={inviteForm.email}
+                      onChange={(e) => setInviteForm((f) => ({ ...f, email: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>ROLE</label>
+                    <select
+                      style={inputStyle}
+                      value={inviteForm.role}
+                      onChange={(e) => setInviteForm((f) => ({ ...f, role: e.target.value }))}
+                    >
+                      {ROLES.map((r) => (
+                        <option key={r} value={r}>
+                          {roleMeta(r).label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>LOCATION</label>
+                    <input
+                      style={inputStyle}
+                      placeholder="SFO · LAX · Remote"
+                      value={inviteForm.location}
+                      onChange={(e) => setInviteForm((f) => ({ ...f, location: e.target.value }))}
+                    />
+                  </div>
+                  {inviteError && (
+                    <div
+                      style={{
+                        background: '#FBF0EF',
+                        border: '1px solid #E3B6B1',
+                        borderRadius: '5px',
+                        padding: '10px 13px',
+                        fontSize: '12px',
+                        color: '#A5362C',
+                      }}
+                    >
+                      {inviteError}
+                    </div>
+                  )}
+                </div>
+                <div
+                  style={{
+                    padding: '16px 24px',
+                    background: '#fff',
+                    borderTop: '1px solid #E2E6E9',
+                    display: 'flex',
+                    justifyContent: 'flex-end',
+                    gap: '10px',
+                  }}
+                >
+                  <button
+                    onClick={closeInviteDrawer}
+                    style={{
+                      fontFamily: "'Archivo', sans-serif",
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      background: '#fff',
+                      color: '#5A6670',
+                      border: '1px solid #D6DCE0',
+                      borderRadius: '5px',
+                      padding: '10px 16px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={sendInvite}
+                    disabled={inviting || !inviteForm.name || !inviteForm.email}
+                    style={{
+                      fontFamily: "'Archivo', sans-serif",
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      background:
+                        inviting || !inviteForm.name || !inviteForm.email ? '#8A99A3' : '#222A30',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: '5px',
+                      padding: '10px 18px',
+                      cursor:
+                        inviting || !inviteForm.name || !inviteForm.email
+                          ? 'not-allowed'
+                          : 'pointer',
+                    }}
+                  >
+                    {inviting ? 'Creating…' : 'Create user'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ADD ROLE MODAL — calls add_role() RPC (extends the enum + registry) */}
+      {roleModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(34,42,48,0.40)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 60,
+          }}
+          onClick={() => setRoleModal(null)}
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: '10px',
+              padding: '26px',
+              width: '440px',
+              maxWidth: '94vw',
+              boxShadow: '0 16px 48px rgba(34,42,48,0.22)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontSize: '16px', fontWeight: 700, letterSpacing: '-0.01em' }}>
+              Add role
+            </div>
+            <div style={{ fontSize: '12px', color: '#8A99A3', margin: '4px 0 18px' }}>
+              A new role becomes selectable when assigning roles and adding users.
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={labelStyle}>ROLE NAME *</label>
+                <input
+                  autoFocus
+                  style={inputStyle}
+                  placeholder="e.g. Warehouse Lead"
+                  value={roleModal.label}
+                  onChange={(e) => setRoleModal((m) => (m ? { ...m, label: e.target.value } : m))}
+                />
+                {roleModal.label.trim() && (
+                  <div
+                    style={{
+                      fontFamily: "'IBM Plex Mono', monospace",
+                      fontSize: '11px',
+                      color: '#8A99A3',
+                      marginTop: '5px',
+                    }}
+                  >
+                    key:{' '}
+                    {roleModal.label
+                      .trim()
+                      .toLowerCase()
+                      .replace(/[^a-z0-9_]+/g, '_')}
+                  </div>
+                )}
               </div>
               <div>
-                <label style={labelStyle}>LOCATION</label>
+                <label style={labelStyle}>DESCRIPTION</label>
                 <input
                   style={inputStyle}
-                  placeholder="SFO · LAX · Remote"
-                  value={inviteForm.location}
-                  onChange={(e) => setInviteForm((f) => ({ ...f, location: e.target.value }))}
+                  placeholder="What this role can do"
+                  value={roleModal.description}
+                  onChange={(e) =>
+                    setRoleModal((m) => (m ? { ...m, description: e.target.value } : m))
+                  }
                 />
+              </div>
+              <div>
+                <label style={labelStyle}>COLOR</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  {ROLE_PALETTE.map((p, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setRoleModal((m) => (m ? { ...m, paletteIdx: i } : m))}
+                      style={{
+                        width: '30px',
+                        height: '30px',
+                        borderRadius: '6px',
+                        background: p.bg,
+                        border:
+                          roleModal.paletteIdx === i ? `2px solid ${p.color}` : '1px solid #E2E6E9',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: '12px',
+                          height: '12px',
+                          borderRadius: '50%',
+                          background: p.color,
+                        }}
+                      />
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
+
+            {roleDefError && (
+              <div
+                style={{
+                  marginTop: '14px',
+                  background: '#FBF0EF',
+                  border: '1px solid #E3B6B1',
+                  borderRadius: '5px',
+                  padding: '10px 13px',
+                  fontSize: '12px',
+                  color: '#A5362C',
+                }}
+              >
+                {roleDefError}
+              </div>
+            )}
+
             <div
               style={{
-                padding: '16px 24px',
-                background: '#fff',
-                borderTop: '1px solid #E2E6E9',
                 display: 'flex',
                 justifyContent: 'flex-end',
                 gap: '10px',
+                marginTop: '22px',
               }}
             >
               <button
-                onClick={() => setInviteDrawer(false)}
+                onClick={() => setRoleModal(null)}
                 style={{
                   fontFamily: "'Archivo', sans-serif",
                   fontSize: '13px',
@@ -1737,21 +2329,21 @@ export default function AdminPage() {
                 Cancel
               </button>
               <button
-                onClick={sendInvite}
-                disabled={inviting}
+                onClick={saveRoleDef}
+                disabled={savingRoleDef || !roleModal.label.trim()}
                 style={{
                   fontFamily: "'Archivo', sans-serif",
                   fontSize: '13px',
                   fontWeight: 600,
-                  background: inviting ? '#8A99A3' : '#222A30',
+                  background: savingRoleDef || !roleModal.label.trim() ? '#8A99A3' : '#222A30',
                   color: '#fff',
                   border: 'none',
                   borderRadius: '5px',
                   padding: '10px 18px',
-                  cursor: inviting ? 'not-allowed' : 'pointer',
+                  cursor: savingRoleDef || !roleModal.label.trim() ? 'not-allowed' : 'pointer',
                 }}
               >
-                {inviting ? 'Sending…' : 'Send invite'}
+                {savingRoleDef ? 'Adding…' : 'Add role'}
               </button>
             </div>
           </div>
