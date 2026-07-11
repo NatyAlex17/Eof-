@@ -206,7 +206,7 @@ export default function AdminPage() {
     setEditor({ open: true, title, subtitle });
   const closeEditor = () => setEditor({ open: false, title: '', subtitle: '' });
 
-  // Real editors: SKU add + tier edit write to Supabase
+  // Real editors: SKU add/edit + tier edit write to Supabase
   const EMPTY_SKU = {
     code: '',
     species: '',
@@ -216,11 +216,38 @@ export default function AdminPage() {
     qbo_item: '',
     base_price_lb: '',
     description: '',
+    active: true,
   };
   const [skuModal, setSkuModal] = useState(false);
+  // null = adding a new SKU; a code = editing that existing SKU
+  const [editingSku, setEditingSku] = useState<string | null>(null);
   const [skuForm, setSkuForm] = useState(EMPTY_SKU);
   const [savingSku, setSavingSku] = useState(false);
   const [skuError, setSkuError] = useState('');
+
+  const openAddSku = () => {
+    setEditingSku(null);
+    setSkuForm(EMPTY_SKU);
+    setSkuError('');
+    setSkuModal(true);
+  };
+
+  const openEditSku = (s: SKU) => {
+    setEditingSku(s.code);
+    setSkuForm({
+      code: s.code,
+      species: s.species,
+      grade: s.grade ?? '',
+      pack_type: s.pack_type ?? '',
+      uom: s.uom ?? 'lb',
+      qbo_item: s.qbo_item ?? '',
+      base_price_lb: s.base_price_lb != null ? String(s.base_price_lb) : '',
+      description: s.description ?? '',
+      active: s.active,
+    });
+    setSkuError('');
+    setSkuModal(true);
+  };
   // inline base-price editing on the SKU table
   const [priceEdit, setPriceEdit] = useState<{ code: string; draft: string } | null>(null);
 
@@ -269,8 +296,9 @@ export default function AdminPage() {
     setSavingSku(true);
     setSkuError('');
     const priceNum = parseFloat(skuForm.base_price_lb);
-    const { error } = await supabase.from('skus').insert({
-      code: skuForm.code.toUpperCase(),
+    // Common columns for both insert and update (code is immutable — it's the PK
+    // and other tables reference it).
+    const fields = {
       species: skuForm.species,
       grade: skuForm.grade || null,
       pack_type: skuForm.pack_type || null,
@@ -278,8 +306,11 @@ export default function AdminPage() {
       qbo_item: skuForm.qbo_item || null,
       base_price_lb: priceNum > 0 ? Math.round(priceNum * 100) / 100 : null,
       description: skuForm.description.trim() || null,
-      active: true,
-    });
+      active: skuForm.active,
+    };
+    const { error } = editingSku
+      ? await supabase.from('skus').update(fields).eq('code', editingSku)
+      : await supabase.from('skus').insert({ code: skuForm.code.toUpperCase(), ...fields });
     setSavingSku(false);
     if (error) {
       setSkuError(
@@ -290,6 +321,7 @@ export default function AdminPage() {
       return;
     }
     setSkuModal(false);
+    setEditingSku(null);
     setSkuForm(EMPTY_SKU);
     fetchSkus();
   };
@@ -665,7 +697,7 @@ export default function AdminPage() {
           )}
           {tab === 'sku' && (
             <button
-              onClick={() => setSkuModal(true)}
+              onClick={openAddSku}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -956,7 +988,7 @@ export default function AdminPage() {
                 <div
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: '110px 1fr 70px 90px 60px 1fr 80px',
+                    gridTemplateColumns: '110px 1fr 70px 90px 60px 1fr 80px 70px',
                     padding: '11px 18px',
                     background: '#FAFBFB',
                     borderBottom: '1px solid #E2E6E9',
@@ -973,6 +1005,7 @@ export default function AdminPage() {
                   <span>UOM</span>
                   <span>QBO ITEM NAME</span>
                   <span>STATUS</span>
+                  <span style={{ textAlign: 'right' }}>ACTION</span>
                 </div>
                 {skusLoading ? (
                   <div style={{ padding: '24px 18px', fontSize: '13px', color: '#8A99A3' }}>
@@ -984,7 +1017,7 @@ export default function AdminPage() {
                       key={s.code}
                       style={{
                         display: 'grid',
-                        gridTemplateColumns: '110px 1fr 70px 90px 60px 1fr 80px',
+                        gridTemplateColumns: '110px 1fr 70px 90px 60px 1fr 80px 70px',
                         alignItems: 'center',
                         padding: '13px 18px',
                         borderBottom: '1px solid #EDEFF1',
@@ -1099,6 +1132,24 @@ export default function AdminPage() {
                         >
                           {s.active ? 'Active' : 'Inactive'}
                         </span>
+                      </span>
+                      <span style={{ textAlign: 'right' }}>
+                        <button
+                          onClick={() => openEditSku(s)}
+                          style={{
+                            fontFamily: "'Archivo', sans-serif",
+                            fontSize: '12px',
+                            fontWeight: 600,
+                            background: '#fff',
+                            color: '#3F6F86',
+                            border: '1px solid #C5D8E2',
+                            borderRadius: '5px',
+                            padding: '6px 12px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          Edit
+                        </button>
                       </span>
                     </div>
                   ))
@@ -2383,7 +2434,7 @@ export default function AdminPage() {
                 marginBottom: '18px',
               }}
             >
-              Add SKU to Master Index
+              {editingSku ? `Edit ${editingSku}` : 'Add SKU to Master Index'}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div>
@@ -2393,9 +2444,14 @@ export default function AdminPage() {
                     ...inputStyle,
                     fontFamily: "'IBM Plex Mono', monospace",
                     textTransform: 'uppercase',
+                    ...(editingSku
+                      ? { background: '#F4F5F6', color: '#8A99A3', cursor: 'not-allowed' }
+                      : {}),
                   }}
                   placeholder="AHI-A+"
                   value={skuForm.code}
+                  disabled={!!editingSku}
+                  title={editingSku ? 'Code is the identifier and cannot be changed' : undefined}
                   onChange={(e) => setSkuForm((f) => ({ ...f, code: e.target.value }))}
                 />
               </div>
@@ -2466,6 +2522,26 @@ export default function AdminPage() {
                   value={skuForm.description}
                   onChange={(e) => setSkuForm((f) => ({ ...f, description: e.target.value }))}
                 />
+              </div>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={labelStyle}>STATUS</label>
+                <label
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '9px',
+                    fontSize: '13px',
+                    color: '#222A30',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={skuForm.active}
+                    onChange={(e) => setSkuForm((f) => ({ ...f, active: e.target.checked }))}
+                  />
+                  Active — available for orders, pricing, and inventory
+                </label>
               </div>
             </div>
 
@@ -2568,7 +2644,7 @@ export default function AdminPage() {
                     savingSku || !skuForm.code || !skuForm.species ? 'not-allowed' : 'pointer',
                 }}
               >
-                {savingSku ? 'Saving…' : 'Add SKU'}
+                {savingSku ? 'Saving…' : editingSku ? 'Save changes' : 'Add SKU'}
               </button>
             </div>
           </div>

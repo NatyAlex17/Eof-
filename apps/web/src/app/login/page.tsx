@@ -21,13 +21,23 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
     const supabase = createClient();
-    const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
-    setLoading(false);
-    if (authError) {
+    const { data: auth, error: authError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+    if (authError || !auth.user) {
+      setLoading(false);
       setError('Invalid email or password.');
       return;
     }
-    router.push('/mana/allocation-board');
+    // Route by role: customers go to their portal, staff to the ops app.
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', auth.user.id)
+      .single();
+    setLoading(false);
+    router.push(profile?.role === 'customer' ? '/portal' : '/mana/allocation-board');
   };
 
   const inputStyle = (focused: boolean): React.CSSProperties => ({
@@ -293,8 +303,14 @@ export default function LoginPage() {
           </form>
         </div>
 
-        <p style={{ textAlign: 'center', fontSize: '12px', color: '#8A99A3', marginTop: '24px' }}>
-          Essential Ocean Foods · Mana ERP · Confidential
+        <p style={{ textAlign: 'center', fontSize: '13px', color: '#5A6670', marginTop: '20px' }}>
+          Are you a customer?{' '}
+          <a href="/signup" style={{ color: '#3F6F86', fontWeight: 600, textDecoration: 'none' }}>
+            Create an account
+          </a>
+        </p>
+        <p style={{ textAlign: 'center', fontSize: '12px', color: '#8A99A3', marginTop: '10px' }}>
+          Essential Ocean Foods · Mana ERP
         </p>
       </div>
 
