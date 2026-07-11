@@ -1004,6 +1004,7 @@ export type Database = {
           ship_date: string | null;
           source: string;
           status: Database['public']['Enums']['order_status'];
+          transport_fee: number | null;
         };
         Insert: {
           carrier?: string | null;
@@ -1020,6 +1021,7 @@ export type Database = {
           ship_date?: string | null;
           source?: string;
           status?: Database['public']['Enums']['order_status'];
+          transport_fee?: number | null;
         };
         Update: {
           carrier?: string | null;
@@ -1036,6 +1038,7 @@ export type Database = {
           ship_date?: string | null;
           source?: string;
           status?: Database['public']['Enums']['order_status'];
+          transport_fee?: number | null;
         };
         Relationships: [
           {

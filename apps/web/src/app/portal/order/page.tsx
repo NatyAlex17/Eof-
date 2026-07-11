@@ -12,12 +12,20 @@ interface LineItem {
   qty: number;
 }
 
-// Shipment methods = the documented freight_mode values (F7).
-type Method = 'trucker' | 'air' | 'customer_pickup';
+// The customer chooses delivery or pickup; staff add the transport fee for
+// delivery orders (freight_mode values map to the documented set).
+type Method = 'delivery' | 'customer_pickup';
 const METHODS: { key: Method; label: string; hint: string }[] = [
-  { key: 'trucker', label: 'Truck delivery', hint: 'Delivered by truck to your address' },
-  { key: 'air', label: 'Air freight', hint: 'Flown to your address' },
-  { key: 'customer_pickup', label: 'Customer pickup', hint: 'You collect from our warehouse' },
+  {
+    key: 'delivery',
+    label: 'Deliver to me',
+    hint: 'We deliver to your address · transport fee added by our team',
+  },
+  {
+    key: 'customer_pickup',
+    label: "I'll pick it up",
+    hint: 'Collect from our warehouse · no transport fee',
+  },
 ];
 
 export default function PortalOrderPage() {
@@ -35,7 +43,7 @@ export default function PortalOrderPage() {
   const [contactPhone, setContactPhone] = useState('');
   const [editContact, setEditContact] = useState(false);
   const [address, setAddress] = useState('');
-  const [method, setMethod] = useState<Method>('trucker');
+  const [method, setMethod] = useState<Method>('delivery');
 
   useEffect(() => {
     (async () => {
@@ -56,7 +64,9 @@ export default function PortalOrderPage() {
       setAddress(last?.delivery_address || c.customer?.address || '');
       if (last?.contact_name) setContactName(last.contact_name);
       if (last?.contact_phone) setContactPhone(last.contact_phone);
-      if (last?.freight_mode) setMethod(last.freight_mode as Method);
+      // Old orders may carry legacy modes (trucker/air) — collapse to delivery.
+      if (last?.freight_mode)
+        setMethod(last.freight_mode === 'customer_pickup' ? 'customer_pickup' : 'delivery');
     })();
     const d = new Date();
     const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -537,7 +547,7 @@ export default function PortalOrderPage() {
                 From your account — tap Change to use different details for this order.
               </div>
 
-              {/* shipment method (freight mode) */}
+              {/* delivery or pickup */}
               <label
                 style={{
                   fontSize: '11px',
@@ -548,7 +558,7 @@ export default function PortalOrderPage() {
                   margin: '22px 0 9px',
                 }}
               >
-                SHIPMENT METHOD
+                DELIVERY OR PICKUP
               </label>
               <div style={{ display: 'flex', gap: '9px', flexWrap: 'wrap' }}>
                 {METHODS.map((m) => {
@@ -683,7 +693,9 @@ export default function PortalOrderPage() {
                     marginTop: '14px',
                   }}
                 >
-                  <span style={{ fontSize: '13px', color: '#5A6670' }}>Total · {totalLb} lb</span>
+                  <span style={{ fontSize: '13px', color: '#5A6670' }}>
+                    {isPickup ? 'Total' : 'Fish total'} · {totalLb} lb
+                  </span>
                   <span
                     style={{
                       fontFamily: "'IBM Plex Mono', monospace",
@@ -694,6 +706,24 @@ export default function PortalOrderPage() {
                     {hasPricing ? money(total) : '—'}
                   </span>
                 </div>
+                {hasPricing && (
+                  <div
+                    style={{
+                      marginTop: '8px',
+                      fontSize: '11px',
+                      color: isPickup ? '#2E6347' : '#8A5A14',
+                      background: isPickup ? '#EAF1ED' : '#F4EEE2',
+                      border: `1px solid ${isPickup ? '#B4D2C0' : '#E4D2A8'}`,
+                      borderRadius: '5px',
+                      padding: '8px 10px',
+                      lineHeight: 1.4,
+                    }}
+                  >
+                    {isPickup
+                      ? 'Pickup — no transport fee. This is the total you pay.'
+                      : 'Does not include the transport fee — our team adds it once they confirm delivery.'}
+                  </div>
+                )}
                 {error && (
                   <div
                     style={{

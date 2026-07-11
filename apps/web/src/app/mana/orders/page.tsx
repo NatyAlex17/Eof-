@@ -37,7 +37,17 @@ interface OrderRow {
   location: string;
   status: OrderStatus;
   enteredBy: string;
+  // delivery details the customer entered
+  freightMode: string | null; // 'delivery' | 'customer_pickup' | legacy
+  deliveryAddress: string | null;
+  contactName: string | null;
+  contactPhone: string | null;
+  transportFee: number | null; // staff-entered, delivery orders
 }
+
+const isPickupMode = (m: string | null) => m === 'customer_pickup';
+const methodLabel = (m: string | null) =>
+  m === 'customer_pickup' ? 'Pickup' : m ? 'Delivery' : '—';
 
 const STATUS_META: Record<OrderStatus, { label: string; color: string; bg: string; dot: string }> =
   {
@@ -65,6 +75,14 @@ const fmtDate = (iso: string) => {
 const GRID = '22px 104px 1.1fr 1.4fr 84px 104px 76px 104px 120px 104px';
 const GRID_GAP = '14px';
 
+const cellLabel: React.CSSProperties = {
+  fontSize: '9px',
+  fontWeight: 700,
+  letterSpacing: '0.06em',
+  color: '#8A99A3',
+};
+const cellVal: React.CSSProperties = { fontSize: '13px', color: '#222A30', marginTop: '3px' };
+
 export default function OrdersPage() {
   const [filter, setFilter] = useState<'all' | OrderStatus>('all');
   const [unassignedOnly, setUnassignedOnly] = useState(false);
@@ -76,6 +94,9 @@ export default function OrdersPage() {
   const [loading, setLoading] = useState(true);
   const [assignFor, setAssignFor] = useState<OrderRow | null>(null);
   const [savingAssign, setSavingAssign] = useState(false);
+  // inline transport-fee editor keyed by order id
+  const [feeEdit, setFeeEdit] = useState<{ id: string; draft: string } | null>(null);
+  const [savingFee, setSavingFee] = useState(false);
 
   const assignLocation = async (id: string, location: string) => {
     setSavingAssign(true);
@@ -84,6 +105,21 @@ export default function OrdersPage() {
     if (error) return; // keep the modal open on failure
     setRows((prev) => prev.map((o) => (o.id === id ? { ...o, location } : o)));
     setAssignFor(null);
+  };
+
+  const saveTransportFee = async (id: string, draft: string) => {
+    const v = parseFloat(draft);
+    const fee =
+      draft.trim() === '' ? null : Number.isFinite(v) && v >= 0 ? Math.round(v * 100) / 100 : null;
+    setSavingFee(true);
+    const { error } = await createClient()
+      .from('orders')
+      .update({ transport_fee: fee })
+      .eq('id', id);
+    setSavingFee(false);
+    if (error) return;
+    setRows((prev) => prev.map((o) => (o.id === id ? { ...o, transportFee: fee } : o)));
+    setFeeEdit(null);
   };
 
   // today computed on the client to avoid SSR mismatch
@@ -98,10 +134,35 @@ export default function OrdersPage() {
   useEffect(() => {
     (async () => {
       setLoading(true);
-      const [{ data: heads }, { data: lineRows }] = await Promise.all([
+      // The fulfillment view predates the delivery columns, so pull those
+      // straight from the orders table and merge by id.
+      const [{ data: heads }, { data: lineRows }, { data: deliveryRows }] = await Promise.all([
         fetchOrderFulfillment(),
         fetchOrderLines(),
+        createClient()
+          .from('orders')
+          .select('id, freight_mode, delivery_address, contact_name, contact_phone, transport_fee'),
       ]);
+
+      const deliveryById: Record<
+        string,
+        {
+          freight_mode: string | null;
+          delivery_address: string | null;
+          contact_name: string | null;
+          contact_phone: string | null;
+          transport_fee: number | null;
+        }
+      > = {};
+      (deliveryRows ?? []).forEach((r) => {
+        deliveryById[r.id] = {
+          freight_mode: r.freight_mode,
+          delivery_address: r.delivery_address,
+          contact_name: r.contact_name,
+          contact_phone: r.contact_phone,
+          transport_fee: r.transport_fee,
+        };
+      });
 
       const linesByOrder: Record<string, OrderLine[]> = {};
       (lineRows ?? []).forEach((r) => {
@@ -133,6 +194,7 @@ export default function OrdersPage() {
           created_at: string;
         };
         const created = new Date(head.created_at);
+        const d = deliveryById[head.id];
         return {
           id: head.id,
           code: head.code,
@@ -150,6 +212,11 @@ export default function OrdersPage() {
           location: head.location ?? '—',
           status: head.status,
           enteredBy: '—',
+          freightMode: d?.freight_mode ?? null,
+          deliveryAddress: d?.delivery_address ?? null,
+          contactName: d?.contact_name ?? null,
+          contactPhone: d?.contact_phone ?? null,
+          transportFee: d?.transport_fee ?? null,
         };
       });
       // newest first
@@ -542,33 +609,51 @@ export default function OrdersPage() {
                     >
                       {o.code}
                     </span>
-                    <span
-                      style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: '8px' }}
-                    >
-                      <span
-                        style={{
-                          fontSize: '14px',
-                          fontWeight: 600,
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                        }}
-                      >
-                        {o.customer}
+                    <span style={{ minWidth: 0 }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span
+                          style={{
+                            fontSize: '14px',
+                            fontWeight: 600,
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}
+                        >
+                          {o.customer}
+                        </span>
+                        <span
+                          style={{
+                            flex: 'none',
+                            fontSize: '9px',
+                            fontWeight: 700,
+                            color: '#5A6670',
+                            border: '1px solid #D6DCE0',
+                            borderRadius: '2px',
+                            padding: '1px 5px',
+                          }}
+                        >
+                          {TIER_LABEL[o.tier]}
+                        </span>
                       </span>
-                      <span
-                        style={{
-                          flex: 'none',
-                          fontSize: '9px',
-                          fontWeight: 700,
-                          color: '#5A6670',
-                          border: '1px solid #D6DCE0',
-                          borderRadius: '2px',
-                          padding: '1px 5px',
-                        }}
-                      >
-                        {TIER_LABEL[o.tier]}
-                      </span>
+                      {o.freightMode && (
+                        <span
+                          style={{
+                            display: 'block',
+                            fontSize: '11px',
+                            color: '#8A99A3',
+                            marginTop: '2px',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                          title={o.deliveryAddress || undefined}
+                        >
+                          {isPickupMode(o.freightMode)
+                            ? '📦 Pickup'
+                            : `🚚 ${o.deliveryAddress || 'Delivery (no address)'}`}
+                        </span>
+                      )}
                     </span>
                     <span style={{ minWidth: 0, display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                       {o.lines.slice(0, 2).map((l, i) => (
@@ -818,6 +903,180 @@ export default function OrdersPage() {
                           </span>
                         </div>
                       </div>
+
+                      {/* DELIVERY — what the customer entered + staff transport fee */}
+                      {o.freightMode && (
+                        <div
+                          style={{
+                            marginTop: '10px',
+                            background: '#fff',
+                            border: '1px solid #E2E6E9',
+                            borderRadius: '6px',
+                            maxWidth: '680px',
+                            padding: '13px 15px',
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontSize: '9px',
+                              fontWeight: 700,
+                              letterSpacing: '0.06em',
+                              color: '#8A99A3',
+                              marginBottom: '10px',
+                            }}
+                          >
+                            DELIVERY
+                          </div>
+                          <div
+                            style={{
+                              display: 'grid',
+                              gridTemplateColumns: '1fr 1fr',
+                              gap: '10px 16px',
+                            }}
+                          >
+                            <div>
+                              <div style={cellLabel}>METHOD</div>
+                              <div style={cellVal}>{methodLabel(o.freightMode)}</div>
+                            </div>
+                            <div>
+                              <div style={cellLabel}>CONTACT</div>
+                              <div style={cellVal}>
+                                {o.contactName || '—'}
+                                {o.contactPhone ? ` · ${o.contactPhone}` : ''}
+                              </div>
+                            </div>
+                            {!isPickupMode(o.freightMode) && (
+                              <div style={{ gridColumn: '1 / -1' }}>
+                                <div style={cellLabel}>DELIVERY ADDRESS</div>
+                                <div style={cellVal}>{o.deliveryAddress || '—'}</div>
+                              </div>
+                            )}
+                          </div>
+
+                          {!isPickupMode(o.freightMode) && (
+                            <div
+                              style={{
+                                marginTop: '12px',
+                                paddingTop: '12px',
+                                borderTop: '1px solid #EDEFF1',
+                                display: 'flex',
+                                alignItems: 'flex-end',
+                                justifyContent: 'space-between',
+                                gap: '12px',
+                              }}
+                            >
+                              <div>
+                                <div style={cellLabel}>TRANSPORT FEE</div>
+                                {feeEdit?.id === o.id ? (
+                                  <div style={{ display: 'flex', gap: '6px', marginTop: '5px' }}>
+                                    <input
+                                      autoFocus
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      value={feeEdit.draft}
+                                      onChange={(e) =>
+                                        setFeeEdit({ id: o.id, draft: e.target.value })
+                                      }
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter')
+                                          saveTransportFee(o.id, feeEdit.draft);
+                                        if (e.key === 'Escape') setFeeEdit(null);
+                                      }}
+                                      placeholder="0.00"
+                                      style={{
+                                        fontFamily: "'IBM Plex Mono', monospace",
+                                        fontSize: '13px',
+                                        fontWeight: 600,
+                                        width: '90px',
+                                        padding: '6px 8px',
+                                        border: '1.5px solid #3F6F86',
+                                        borderRadius: '5px',
+                                        outline: 'none',
+                                        textAlign: 'right',
+                                      }}
+                                    />
+                                    <button
+                                      onClick={() => saveTransportFee(o.id, feeEdit.draft)}
+                                      disabled={savingFee}
+                                      style={{
+                                        fontFamily: "'Archivo', sans-serif",
+                                        fontSize: '12px',
+                                        fontWeight: 600,
+                                        background: '#222A30',
+                                        color: '#fff',
+                                        border: 'none',
+                                        borderRadius: '5px',
+                                        padding: '6px 12px',
+                                        cursor: savingFee ? 'not-allowed' : 'pointer',
+                                      }}
+                                    >
+                                      {savingFee ? '…' : 'Save'}
+                                    </button>
+                                    <button
+                                      onClick={() => setFeeEdit(null)}
+                                      style={{
+                                        fontSize: '14px',
+                                        background: '#fff',
+                                        color: '#8A99A3',
+                                        border: '1px solid #D6DCE0',
+                                        borderRadius: '5px',
+                                        padding: '0 10px',
+                                        cursor: 'pointer',
+                                      }}
+                                    >
+                                      ×
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() =>
+                                      setFeeEdit({
+                                        id: o.id,
+                                        draft: o.transportFee != null ? String(o.transportFee) : '',
+                                      })
+                                    }
+                                    style={{
+                                      marginTop: '4px',
+                                      fontFamily: "'Archivo', sans-serif",
+                                      fontSize: '13px',
+                                      fontWeight: 600,
+                                      color: o.transportFee != null ? '#222A30' : '#3F6F86',
+                                      background: o.transportFee != null ? 'none' : '#EEF3F6',
+                                      border:
+                                        o.transportFee != null
+                                          ? '1px dashed #C2CAD0'
+                                          : '1px solid #C5D8E2',
+                                      borderRadius: '5px',
+                                      padding: '5px 11px',
+                                      cursor: 'pointer',
+                                    }}
+                                  >
+                                    {o.transportFee != null
+                                      ? money(o.transportFee)
+                                      : '+ Add transport fee'}
+                                  </button>
+                                )}
+                              </div>
+                              <div style={{ textAlign: 'right' }}>
+                                <div style={cellLabel}>GRAND TOTAL</div>
+                                <div
+                                  style={{
+                                    fontFamily: "'IBM Plex Mono', monospace",
+                                    fontSize: '15px',
+                                    fontWeight: 700,
+                                    marginTop: '3px',
+                                  }}
+                                >
+                                  {o.transportFee != null
+                                    ? money(orderValue(o) + Number(o.transportFee))
+                                    : `${money(orderValue(o))} + transport`}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
