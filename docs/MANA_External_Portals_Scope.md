@@ -1,10 +1,29 @@
 # MANA — External Portals Scope (Vendor & Customer Roles)
 
-**Status:** Proposed — awaiting client sign-off (Erdolo / Blake).
+**Status:** ✅ **Built (MVP)** — both portals are implemented and wired to Supabase. See
+`MANA_Delivered_July.md` for the delivered detail. Original scoping below retained for reference.
 **Context:** In the July call, Erdolo explicitly asked for two external-facing capabilities that are
 **not in the current scope of work**: customers ordering directly, and vendors uploading directly. Eyoab
 confirmed on the call that today the customer never touches the system and neither is written into the SOW.
-This doc scopes both so they can be approved as a defined future phase.
+This doc scoped both; both were subsequently approved and built.
+
+---
+
+## As-built deltas (how the build differs from the original scope)
+
+- **Vendor uploads are a structured form, not file parsing.** Because vendor PDFs aren't standardized
+  (analysis option (c)), verified vendors key packing-list lines directly (box #, species, grade, weight,
+  pieces, box type) into a hosted form — perfect structure, no parser. This supersedes the "point the
+  ingestion pipeline at a logged-in vendor" line below.
+- **Vendors no longer submit invoices.** The system **generates** a professional, watermarked commercial
+  invoice / packing list from the vendor's structured data (`/mana/documents/[id]/invoice`, print-to-PDF).
+- **Vendor verification gate added.** Self-signup vendors start `pending` and cannot submit until staff
+  verify them (enforced in RLS). Admin page: `/mana/vendor-verification`.
+- **Owners/staff create shipments, not vendors.** Vendor submits paperwork only; staff turn it into a
+  shipment in the Documents Inbox (`/mana/documents`).
+- **Customer pricing is tier-gated.** New self-signups have no tier and see "prices will be listed shortly"
+  until staff assign one; the tier value itself is never shown to the customer.
+- **Delivery vs pickup + transport fee** added to customer ordering (staff set the transport fee).
 
 ---
 

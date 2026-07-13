@@ -27,7 +27,7 @@ export async function fetchLots(
 ): Promise<{ data: LotTree[]; error: PostgrestError | null }> {
   let q = supabase()
     .from('lots')
-    .select('*, boxes(*, box_contents(*))')
+    .select('*, vendors(name), boxes(*, box_contents(*))')
     .order('created_at', { ascending: false });
   if (location) q = q.eq('location', location);
   const { data, error } = await q;

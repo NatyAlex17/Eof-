@@ -10,6 +10,9 @@ interface Claim {
   status: string;
   created_at: string;
   order_id: string | null;
+  boxes: string | null;
+  weight_lb: number | null;
+  photo_paths: string[] | null;
 }
 interface OrderOpt {
   id: string;
@@ -39,7 +42,10 @@ export default function PortalClaims() {
 
   const [orderId, setOrderId] = useState('');
   const [species, setSpecies] = useState('');
+  const [box, setBox] = useState('');
+  const [weight, setWeight] = useState('');
   const [reason, setReason] = useState('');
+  const [files, setFiles] = useState<File[]>([]);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
@@ -49,7 +55,7 @@ export default function PortalClaims() {
       supabase.from('orders').select('id, code').order('created_at', { ascending: false }),
       supabase
         .from('credit_claims')
-        .select('id, species, reason, status, created_at, order_id')
+        .select('id, species, reason, status, created_at, order_id, boxes, weight_lb, photo_paths')
         .order('created_at', { ascending: false }),
     ]);
     setCustomerId(cust?.id ?? null);
@@ -67,12 +73,34 @@ export default function PortalClaims() {
     if (!reason.trim() || !customerId || saving) return;
     setSaving(true);
     setMsg(null);
+
+    // Upload photos (if any) to the customer's own folder in claim-photos.
+    const paths: string[] = [];
+    for (const f of files) {
+      const safe = f.name.replace(/[^a-zA-Z0-9._-]+/g, '_');
+      const key = `${customerId}/${Date.now()}_${safe}`;
+      const { error: upErr } = await supabase.storage.from('claim-photos').upload(key, f, {
+        contentType: f.type || undefined,
+        upsert: false,
+      });
+      if (upErr) {
+        setSaving(false);
+        setMsg({ kind: 'err', text: `Photo upload failed: ${upErr.message}` });
+        return;
+      }
+      paths.push(`claim-photos/${key}`);
+    }
+
+    const w = parseFloat(weight);
     const { error } = await supabase.from('credit_claims').insert({
       customer_id: customerId,
       order_id: orderId || null,
       species: species.trim() || null,
+      boxes: box.trim() || null,
+      weight_lb: Number.isFinite(w) && w > 0 ? Math.round(w * 100) / 100 : null,
       reason: reason.trim(),
       claimed_by: customerName || null,
+      photo_paths: paths,
       status: 'open',
     });
     setSaving(false);
@@ -82,7 +110,10 @@ export default function PortalClaims() {
     }
     setOrderId('');
     setSpecies('');
+    setBox('');
+    setWeight('');
     setReason('');
+    setFiles([]);
     setMsg({ kind: 'ok', text: 'Claim submitted. Our team will review it and follow up.' });
     load();
   };
@@ -169,6 +200,29 @@ export default function PortalClaims() {
                   onChange={(e) => setSpecies(e.target.value)}
                 />
               </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={label}>BOX # (OPTIONAL)</label>
+                  <input
+                    style={input}
+                    placeholder="e.g. 4"
+                    value={box}
+                    onChange={(e) => setBox(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label style={label}>WEIGHT (LB, OPTIONAL)</label>
+                  <input
+                    style={input}
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    placeholder="e.g. 65.5"
+                    value={weight}
+                    onChange={(e) => setWeight(e.target.value)}
+                  />
+                </div>
+              </div>
               <div>
                 <label style={label}>WHAT HAPPENED? *</label>
                 <textarea
@@ -177,6 +231,21 @@ export default function PortalClaims() {
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
                 />
+              </div>
+              <div>
+                <label style={label}>PHOTOS (OPTIONAL)</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
+                  style={{ ...input, padding: '7px 10px', cursor: 'pointer' }}
+                />
+                {files.length > 0 && (
+                  <div style={{ fontSize: '11px', color: '#5A6670', marginTop: '5px' }}>
+                    {files.length} photo{files.length === 1 ? '' : 's'} attached
+                  </div>
+                )}
               </div>
               {msg && (
                 <div
@@ -271,6 +340,20 @@ export default function PortalClaims() {
                           {st.label}
                         </span>
                       </div>
+                      {(c.boxes || c.weight_lb != null) && (
+                        <div
+                          style={{
+                            fontFamily: "'IBM Plex Mono', monospace",
+                            fontSize: '11px',
+                            color: '#8A5A14',
+                            marginBottom: '6px',
+                          }}
+                        >
+                          {c.boxes ? `Box ${c.boxes}` : ''}
+                          {c.boxes && c.weight_lb != null ? ' · ' : ''}
+                          {c.weight_lb != null ? `${c.weight_lb} lb` : ''}
+                        </div>
+                      )}
                       <div style={{ fontSize: '13px', color: '#5A6670', lineHeight: 1.5 }}>
                         {c.reason}
                       </div>
@@ -280,6 +363,9 @@ export default function PortalClaims() {
                           day: 'numeric',
                           year: 'numeric',
                         })}
+                        {c.photo_paths && c.photo_paths.length > 0
+                          ? ` · ${c.photo_paths.length} photo${c.photo_paths.length === 1 ? '' : 's'}`
+                          : ''}
                       </div>
                     </div>
                   );

@@ -342,6 +342,7 @@ export type Database = {
           lot: string | null;
           lot_id: string | null;
           order_id: string | null;
+          photo_paths: Json;
           qbo_ref: string | null;
           reason: string | null;
           resolved_note: string | null;
@@ -349,6 +350,7 @@ export type Database = {
           species: string | null;
           status: Database['public']['Enums']['claim_status'];
           vendor_id: string | null;
+          weight_lb: number | null;
         };
         Insert: {
           amount?: number;
@@ -361,6 +363,7 @@ export type Database = {
           lot?: string | null;
           lot_id?: string | null;
           order_id?: string | null;
+          photo_paths?: Json;
           qbo_ref?: string | null;
           reason?: string | null;
           resolved_note?: string | null;
@@ -368,6 +371,7 @@ export type Database = {
           species?: string | null;
           status?: Database['public']['Enums']['claim_status'];
           vendor_id?: string | null;
+          weight_lb?: number | null;
         };
         Update: {
           amount?: number;
@@ -380,6 +384,7 @@ export type Database = {
           lot?: string | null;
           lot_id?: string | null;
           order_id?: string | null;
+          photo_paths?: Json;
           qbo_ref?: string | null;
           reason?: string | null;
           resolved_note?: string | null;
@@ -387,6 +392,7 @@ export type Database = {
           species?: string | null;
           status?: Database['public']['Enums']['claim_status'];
           vendor_id?: string | null;
+          weight_lb?: number | null;
         };
         Relationships: [
           {
@@ -498,7 +504,7 @@ export type Database = {
           routing_detected: Database['public']['Enums']['shipment_routing'] | null;
           sha256: string | null;
           shipment_id: string | null;
-          storage_path: string;
+          storage_path: string | null;
           vendor_email_id: string | null;
           vendor_id: string | null;
         };
@@ -519,7 +525,7 @@ export type Database = {
           routing_detected?: Database['public']['Enums']['shipment_routing'] | null;
           sha256?: string | null;
           shipment_id?: string | null;
-          storage_path: string;
+          storage_path?: string | null;
           vendor_email_id?: string | null;
           vendor_id?: string | null;
         };
@@ -842,6 +848,7 @@ export type Database = {
           location: string | null;
           lot_code: string;
           received_at: string | null;
+          shipment_id: string | null;
           status: Database['public']['Enums']['lot_status'];
           vendor_id: string | null;
         };
@@ -851,6 +858,7 @@ export type Database = {
           location?: string | null;
           lot_code: string;
           received_at?: string | null;
+          shipment_id?: string | null;
           status?: Database['public']['Enums']['lot_status'];
           vendor_id?: string | null;
         };
@@ -860,10 +868,18 @@ export type Database = {
           location?: string | null;
           lot_code?: string;
           received_at?: string | null;
+          shipment_id?: string | null;
           status?: Database['public']['Enums']['lot_status'];
           vendor_id?: string | null;
         };
         Relationships: [
+          {
+            foreignKeyName: 'lots_shipment_id_fkey';
+            columns: ['shipment_id'];
+            isOneToOne: false;
+            referencedRelation: 'shipments';
+            referencedColumns: ['id'];
+          },
           {
             foreignKeyName: 'lots_vendor_id_fkey';
             columns: ['vendor_id'];
@@ -1216,6 +1232,7 @@ export type Database = {
         Row: {
           created_at: string;
           customer_id: string | null;
+          vendor_id: string | null;
           email: string;
           id: string;
           last_seen: string | null;
@@ -1227,6 +1244,7 @@ export type Database = {
         Insert: {
           created_at?: string;
           customer_id?: string | null;
+          vendor_id?: string | null;
           email: string;
           id: string;
           last_seen?: string | null;
@@ -1238,6 +1256,7 @@ export type Database = {
         Update: {
           created_at?: string;
           customer_id?: string | null;
+          vendor_id?: string | null;
           email?: string;
           id?: string;
           last_seen?: string | null;
@@ -2120,6 +2139,10 @@ export type Database = {
           id: string;
           name: string;
           terms: string | null;
+          verification_status: string;
+          verified_at: string | null;
+          verified_by: string | null;
+          rejection_reason: string | null;
         };
         Insert: {
           code: string;
@@ -2128,6 +2151,10 @@ export type Database = {
           id?: string;
           name: string;
           terms?: string | null;
+          verification_status?: string;
+          verified_at?: string | null;
+          verified_by?: string | null;
+          rejection_reason?: string | null;
         };
         Update: {
           code?: string;
@@ -2136,6 +2163,10 @@ export type Database = {
           id?: string;
           name?: string;
           terms?: string | null;
+          verification_status?: string;
+          verified_at?: string | null;
+          verified_by?: string | null;
+          rejection_reason?: string | null;
         };
         Relationships: [];
       };
@@ -2264,6 +2295,8 @@ export type Database = {
         };
       };
       app_customer_id: { Args: never; Returns: string };
+      app_vendor_id: { Args: never; Returns: string };
+      app_vendor_verified: { Args: never; Returns: boolean };
       app_role: {
         Args: never;
         Returns: Database['public']['Enums']['user_role'];
@@ -2295,7 +2328,15 @@ export type Database = {
       po_bill_status: 'not_billed' | 'partially_billed' | 'billed';
       shipment_routing: 'warehouse' | 'direct';
       statement_status: 'draft' | 'sent' | 'countered' | 'settled';
-      user_role: 'admin' | 'operations' | 'finance' | 'sales' | 'logistics' | 'viewer' | 'customer';
+      user_role:
+        | 'admin'
+        | 'operations'
+        | 'finance'
+        | 'sales'
+        | 'logistics'
+        | 'viewer'
+        | 'customer'
+        | 'vendor';
       user_status: 'active' | 'invited' | 'inactive';
       vendor_invoice_status: 'draft' | 'parsed' | 'needs_review' | 'approved' | 'billed' | 'void';
     };
@@ -2447,7 +2488,16 @@ export const Constants = {
       po_bill_status: ['not_billed', 'partially_billed', 'billed'],
       shipment_routing: ['warehouse', 'direct'],
       statement_status: ['draft', 'sent', 'countered', 'settled'],
-      user_role: ['admin', 'operations', 'finance', 'sales', 'logistics', 'viewer', 'customer'],
+      user_role: [
+        'admin',
+        'operations',
+        'finance',
+        'sales',
+        'logistics',
+        'viewer',
+        'customer',
+        'vendor',
+      ],
       user_status: ['active', 'invited', 'inactive'],
       vendor_invoice_status: ['draft', 'parsed', 'needs_review', 'approved', 'billed', 'void'],
     },

@@ -1,5 +1,8 @@
 # MANA Operations Platform — Task Breakdown
 
+> ⚠️ **Superseded.** Use `MANA_Master_Task_List.md` for the live plan and `MANA_Delivered_July.md`
+> for what's already built. Kept for reference only.
+
 Two full-stack developers. Tasks are ordered roughly by dependency (top ones unblock the ones below), no dates attached. Everything already delivered (UI, schema v2, auth, DB types, data hooks, ADR, Vercel deploy) is excluded.
 
 **Dev A — Operations Spine** · **Dev B — Data & Integrations**
