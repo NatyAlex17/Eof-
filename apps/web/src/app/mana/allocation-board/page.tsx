@@ -6,7 +6,7 @@ import Nav from '../components/Nav';
 import ConfirmLockModal from '../components/ConfirmLockModal';
 import LockedBoardBanner from '../components/LockedBoardBanner';
 import SplitBoxModal from '../components/SplitBoxModal';
-import { fetchOrderFulfillment, fetchOrderLines } from '@/lib/data/queries';
+import { fetchOrderFulfillment, fetchOrderLines, fetchLots } from '@/lib/data/queries';
 
 interface OrderLine {
   species: string;
@@ -144,86 +144,43 @@ export default function AllocationBoardPage() {
     })();
   }, [location]);
 
-  // Lots contain boxes; boxes contain mixed-species contents.
-  const [lots, setLots] = useState<Lot[]>([
-    {
-      id: 'lot1',
-      lot: 'LOT-2207',
-      vendor: 'Kona Fresh Catch',
-      boxes: [
-        {
-          id: 'b1',
-          n: 'B-4471',
-          idx: 1,
-          contents: [
-            { id: 'b1c1', species: 'Ahi Tuna', grade: 'A+', weight: 42.6, assignedTo: null },
-          ],
-        },
-        {
-          id: 'b2',
-          n: 'B-4472',
-          idx: 2,
-          contents: [
-            { id: 'b2c1', species: 'Ahi Tuna', grade: 'A+', weight: 38.1, assignedTo: null },
-            { id: 'b2c2', species: 'Ono', grade: 'A', weight: 6.0, assignedTo: null },
-          ],
-        },
-        {
-          id: 'b3',
-          n: 'B-4473',
-          idx: 3,
-          contents: [
-            { id: 'b3c1', species: 'Ahi Tuna', grade: 'A+', weight: 40.2, assignedTo: null },
-          ],
-        },
-        {
-          id: 'b4',
-          n: 'B-4474',
-          idx: 4,
-          contents: [
-            { id: 'b4c1', species: 'Ono', grade: 'A', weight: 30.0, assignedTo: null },
-            { id: 'b4c2', species: 'Ahi Tuna', grade: 'A', weight: 10.0, assignedTo: null },
-          ],
-        },
-        {
-          id: 'b5',
-          n: 'B-4475',
-          idx: 5,
-          contents: [
-            { id: 'b5c1', species: 'Ahi Tuna', grade: 'A+', weight: 39.5, assignedTo: null },
-          ],
-        },
-      ],
-    },
-    {
-      id: 'lot2',
-      lot: 'LOT-2208',
-      vendor: 'Pacific Blue Co.',
-      boxes: [
-        {
-          id: 'b7',
-          n: 'B-4520',
-          idx: 1,
-          contents: [{ id: 'b7c1', species: 'Salmon', grade: 'A', weight: 31.2, assignedTo: null }],
-        },
-        {
-          id: 'b8',
-          n: 'B-4521',
-          idx: 2,
-          contents: [
-            { id: 'b8c1', species: 'Salmon', grade: 'A', weight: 33.5, assignedTo: null },
-            { id: 'b8c2', species: 'Hamachi', grade: 'A+', weight: 4.0, assignedTo: null },
-          ],
-        },
-        {
-          id: 'b9',
-          n: 'B-4522',
-          idx: 3,
-          contents: [{ id: 'b9c1', species: 'Salmon', grade: 'A', weight: 29.8, assignedTo: null }],
-        },
-      ],
-    },
-  ]);
+  // Lots contain boxes; boxes contain mixed-species contents. Inventory loads
+  // live from Supabase (materialized when staff accept a vendor packing list on
+  // the Documents inbox), filtered to the current warehouse location.
+  const [lots, setLots] = useState<Lot[]>([]);
+  const [lotsLoading, setLotsLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      setLotsLoading(true);
+      const { data } = await fetchLots(location);
+      const mapped: Lot[] = (data ?? []).map((lt) => ({
+        id: lt.id,
+        lot: lt.lot_code,
+        vendor: lt.vendors?.name ?? '—',
+        boxes: [...lt.boxes]
+          .sort((a, b) => (a.idx ?? 0) - (b.idx ?? 0))
+          .map((b, bi) => ({
+            id: b.id,
+            n: b.label,
+            idx: b.idx ?? bi + 1,
+            // Assignments are held in-session for now (not yet persisted), so
+            // every content line starts unassigned on load.
+            contents: b.box_contents.map((c) => ({
+              id: c.id,
+              species: c.species,
+              grade: c.grade ?? '',
+              weight: Number(c.weight) || 0,
+              assignedTo: null,
+              splitGroup: c.split_group ?? undefined,
+              part: (c.part as 'A' | 'B' | undefined) ?? undefined,
+            })),
+          })),
+      }));
+      setLots(mapped);
+      setLotsLoading(false);
+    })();
+  }, [location]);
 
   const getOrder = (id: string | null) => orders.find((o) => o.id === id) || null;
   const getOrderColor = (id: string | null) => getOrder(id)?.color || '#CCCCCC';
@@ -887,6 +844,27 @@ export default function AllocationBoardPage() {
             </div>
 
             <div style={{ flex: 1, overflowY: 'auto', padding: '18px 22px' }}>
+              {lotsLoading ? (
+                <div style={{ fontSize: '13px', color: '#8A99A3', padding: '8px 2px' }}>
+                  Loading inventory…
+                </div>
+              ) : lots.length === 0 ? (
+                <div
+                  style={{
+                    border: '1px dashed #D6DCE0',
+                    borderRadius: '8px',
+                    padding: '28px',
+                    textAlign: 'center',
+                    fontSize: '13px',
+                    color: '#8A99A3',
+                    lineHeight: 1.6,
+                  }}
+                >
+                  No inventory at {location} yet.
+                  <br />
+                  Accept a vendor packing list on the Documents inbox to receive boxes here.
+                </div>
+              ) : null}
               {lots.map((lot) => {
                 const speciesInLot = Array.from(
                   new Set(lot.boxes.flatMap((b) => b.contents.map((c) => c.species)))

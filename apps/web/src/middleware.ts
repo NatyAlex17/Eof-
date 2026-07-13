@@ -29,31 +29,34 @@ export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const isMana = path.startsWith('/mana');
   const isPortal = path.startsWith('/portal');
+  const isVendor = path.startsWith('/vendor') && !path.startsWith('/vendor-signup');
 
-  // Unauthenticated users can't reach either protected area.
-  if (!user && (isMana || isPortal)) {
+  // Unauthenticated users can't reach any protected area.
+  if (!user && (isMana || isPortal || isVendor)) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
     return NextResponse.redirect(url);
   }
 
-  // Role-based isolation: a customer sees ONLY the portal; staff use /mana.
-  if (user && (isMana || isPortal)) {
+  // Role isolation: customer -> /portal only, vendor -> /vendor only,
+  // staff -> /mana only. Each role is bounced to its own home.
+  if (user && (isMana || isPortal || isVendor)) {
     const { data: profile } = await supabase
       .from('profiles')
       .select('role')
       .eq('id', user.id)
       .single();
-    const isCustomer = profile?.role === 'customer';
+    const role = profile?.role;
+    const home =
+      role === 'customer' ? '/portal' : role === 'vendor' ? '/vendor' : '/mana/allocation-board';
+    const allowed =
+      (role === 'customer' && isPortal) ||
+      (role === 'vendor' && isVendor) ||
+      (role !== 'customer' && role !== 'vendor' && isMana);
 
-    if (isCustomer && isMana) {
+    if (!allowed) {
       const url = request.nextUrl.clone();
-      url.pathname = '/portal';
-      return NextResponse.redirect(url);
-    }
-    if (!isCustomer && isPortal) {
-      const url = request.nextUrl.clone();
-      url.pathname = '/mana/allocation-board';
+      url.pathname = home;
       return NextResponse.redirect(url);
     }
   }
@@ -62,5 +65,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/mana/:path*', '/portal/:path*'],
+  matcher: ['/mana/:path*', '/portal/:path*', '/vendor/:path*'],
 };

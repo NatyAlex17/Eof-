@@ -30,14 +30,20 @@ export default function LoginPage() {
       setError('Invalid email or password.');
       return;
     }
-    // Route by role: customers go to their portal, staff to the ops app.
+    // Route by role: customers and vendors go to their portals, staff to ops.
     const { data: profile } = await supabase
       .from('profiles')
       .select('role')
       .eq('id', auth.user.id)
       .single();
     setLoading(false);
-    router.push(profile?.role === 'customer' ? '/portal' : '/mana/allocation-board');
+    const dest =
+      profile?.role === 'customer'
+        ? '/portal'
+        : profile?.role === 'vendor'
+          ? '/vendor'
+          : '/mana/allocation-board';
+    router.push(dest);
   };
 
   const inputStyle = (focused: boolean): React.CSSProperties => ({
@@ -304,9 +310,17 @@ export default function LoginPage() {
         </div>
 
         <p style={{ textAlign: 'center', fontSize: '13px', color: '#5A6670', marginTop: '20px' }}>
-          Are you a customer?{' '}
+          Customer?{' '}
           <a href="/signup" style={{ color: '#3F6F86', fontWeight: 600, textDecoration: 'none' }}>
             Create an account
+          </a>
+          {'  ·  '}
+          Vendor?{' '}
+          <a
+            href="/vendor-signup"
+            style={{ color: '#3F6F86', fontWeight: 600, textDecoration: 'none' }}
+          >
+            Vendor sign up
           </a>
         </p>
         <p style={{ textAlign: 'center', fontSize: '12px', color: '#8A99A3', marginTop: '10px' }}>

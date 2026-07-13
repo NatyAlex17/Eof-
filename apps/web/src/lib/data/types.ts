@@ -32,5 +32,6 @@ export type SpeciesAvailability = Views['availability_by_species']['Row'];
 
 /** Lot with its boxes and each box's species contents — the board/inventory shape. */
 export type LotTree = Lot & {
+  vendors: Pick<Vendor, 'name'> | null;
   boxes: Array<Box & { box_contents: BoxContent[] }>;
 };

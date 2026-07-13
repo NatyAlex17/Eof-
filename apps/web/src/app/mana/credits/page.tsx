@@ -1,10 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Nav from '../components/Nav';
+import { createClient } from '@/lib/supabase/client';
 
 interface Claim {
   id: string;
+  ref: string;
   customer: string;
   order: string;
   lot: string;
@@ -19,6 +21,8 @@ interface Claim {
   resolvedNote?: string;
   salesRep: string;
   counterAmount?: number;
+  weightLb: number | null;
+  photoPaths: string[];
 }
 
 interface Downgrade {
@@ -35,68 +39,6 @@ interface Downgrade {
   date: string;
   status: 'pending' | 'applied' | 'disputed';
 }
-
-const SEED_CLAIMS: Claim[] = [
-  {
-    id: 'CR-041',
-    customer: "Roy's",
-    order: '#2205',
-    lot: 'LOT-2209',
-    boxes: 'B-4560, B-4561',
-    species: 'Ono',
-    reason: 'Temp abuse on arrival — 2 boxes above 40°F',
-    claimedBy: 'Roy Yamaguchi',
-    date: 'Jun 23',
-    amount: -380.0,
-    status: 'open',
-    salesRep: 'Blanca',
-  },
-  {
-    id: 'CR-040',
-    customer: 'Morimoto',
-    order: '#2207',
-    lot: 'LOT-2208',
-    boxes: 'B-4521',
-    species: 'Salmon',
-    reason: 'Color downgrade — graded A, arrived B',
-    claimedBy: 'M. Kitchen',
-    date: 'Jun 23',
-    amount: -145.0,
-    status: 'open',
-    salesRep: 'Blanca',
-  },
-  {
-    id: 'CR-039',
-    customer: 'Nobu',
-    order: '#2201',
-    lot: 'LOT-2207',
-    boxes: 'B-4472',
-    species: 'Ahi Tuna',
-    reason: 'Short weight — box under stated by 2.1 lb',
-    claimedBy: 'Nobu Matsuhisa',
-    date: 'Jun 22',
-    amount: -59.8,
-    status: 'approved',
-    qboRef: 'CM-118',
-    resolvedNote: 'Approved by Blanca · QBO credit memo CM-118 issued · vendor recon updated.',
-    salesRep: 'Blanca',
-  },
-  {
-    id: 'CR-037',
-    customer: "Alan Wong's",
-    order: '#2195',
-    lot: 'LOT-2201',
-    boxes: 'B-4380',
-    species: 'Hamachi',
-    reason: 'Wrong species delivered — ordered Hamachi, received Yellowtail',
-    claimedBy: 'Alan Wong',
-    date: 'Jun 19',
-    amount: -210.0,
-    status: 'countered',
-    resolvedNote: 'Counter offer sent: partial credit $105 · awaiting customer response.',
-    salesRep: 'Blanca',
-  },
-];
 
 const SEED_DOWNGRADES: Downgrade[] = [
   {
@@ -143,9 +85,32 @@ const SEED_DOWNGRADES: Downgrade[] = [
   },
 ];
 
+interface ClaimRow {
+  id: string;
+  boxes: string | null;
+  species: string | null;
+  reason: string | null;
+  claimed_by: string | null;
+  amount: number | null;
+  counter_amount: number | null;
+  status: string;
+  qbo_ref: string | null;
+  resolved_note: string | null;
+  sales_rep: string | null;
+  created_at: string;
+  weight_lb: number | null;
+  photo_paths: string[] | null;
+  order_id: string | null;
+  customers: { name: string } | null;
+  orders: { code: string } | null;
+}
+
 export default function CreditsPage() {
+  const supabase = createClient();
   const [tab, setTab] = useState<'claims' | 'downgrades'>('claims');
-  const [claims, setClaims] = useState<Claim[]>(SEED_CLAIMS);
+  const [claims, setClaims] = useState<Claim[]>([]);
+  const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [counterModal, setCounterModal] = useState<{ claim: Claim; amount: string } | null>(null);
   const [form, setForm] = useState({
@@ -166,73 +131,118 @@ export default function CreditsPage() {
     return (n < 0 ? '−$' : '$') + v;
   };
 
-  const approveClaim = (id: string) => {
-    setClaims((prev) =>
-      prev.map((c) =>
-        c.id === id
-          ? {
-              ...c,
-              status: 'approved',
-              qboRef: 'CM-' + (119 + prev.filter((x) => x.status === 'approved').length),
-              resolvedNote: 'Approved · QBO credit memo issued · vendor recon flagged.',
-            }
-          : c
+  async function load() {
+    const { data } = await supabase
+      .from('credit_claims')
+      .select(
+        'id, boxes, species, reason, claimed_by, amount, counter_amount, status, qbo_ref, resolved_note, sales_rep, created_at, weight_lb, photo_paths, order_id, customers(name), orders(code)'
       )
+      .order('created_at', { ascending: false });
+
+    const rows = (data ?? []) as unknown as ClaimRow[];
+    const mapped: Claim[] = rows.map((r) => ({
+      id: r.id,
+      ref: `CR-${r.id.slice(0, 4).toUpperCase()}`,
+      customer: r.customers?.name || r.claimed_by || '—',
+      order: r.orders?.code || '—',
+      lot: '—',
+      boxes: r.boxes || '—',
+      species: r.species || '—',
+      reason: r.reason || '—',
+      claimedBy: r.claimed_by || '—',
+      date: new Date(r.created_at).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+      }),
+      amount: -(Number(r.amount) || 0),
+      status: (['open', 'approved', 'countered', 'rejected'].includes(r.status)
+        ? r.status
+        : 'open') as Claim['status'],
+      qboRef: r.qbo_ref || undefined,
+      resolvedNote: r.resolved_note || undefined,
+      salesRep: r.sales_rep || '—',
+      counterAmount: r.counter_amount != null ? -(Number(r.counter_amount) || 0) : undefined,
+      weightLb: r.weight_lb != null ? Number(r.weight_lb) : null,
+      photoPaths: Array.isArray(r.photo_paths) ? r.photo_paths : [],
+    }));
+    setClaims(mapped);
+    setLoading(false);
+
+    // Batch-sign photo URLs from the private claim-photos bucket.
+    const keys = Array.from(new Set(mapped.flatMap((c) => c.photoPaths))).map((p) =>
+      p.replace(/^claim-photos\//, '')
     );
+    if (keys.length > 0) {
+      const { data: signed } = await supabase.storage
+        .from('claim-photos')
+        .createSignedUrls(keys, 3600);
+      if (signed) {
+        const urls: Record<string, string> = {};
+        signed.forEach((s) => {
+          if (s.signedUrl && s.path) urls[`claim-photos/${s.path}`] = s.signedUrl;
+        });
+        setPhotoUrls(urls);
+      }
+    }
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const approveClaim = async (id: string) => {
+    const nextRef = 'CM-' + (119 + claims.filter((x) => x.status === 'approved').length);
+    await supabase
+      .from('credit_claims')
+      .update({
+        status: 'approved',
+        qbo_ref: nextRef,
+        resolved_note: 'Approved · QBO credit memo issued · vendor recon flagged.',
+      })
+      .eq('id', id);
+    load();
   };
 
-  const confirmCounter = () => {
+  const confirmCounter = async () => {
     if (!counterModal) return;
     const amt = Math.abs(parseFloat(counterModal.amount) || 0);
     if (amt <= 0) return;
-    setClaims((prev) =>
-      prev.map((c) =>
-        c.id === counterModal.claim.id
-          ? {
-              ...c,
-              status: 'countered',
-              counterAmount: -amt,
-              resolvedNote: `Counter offer sent: partial credit $${amt.toFixed(2)} (claimed ${money(counterModal.claim.amount)}) · awaiting customer response.`,
-            }
-          : c
-      )
-    );
+    await supabase
+      .from('credit_claims')
+      .update({
+        status: 'countered',
+        counter_amount: amt,
+        resolved_note: `Counter offer sent: partial credit $${amt.toFixed(2)} (claimed ${money(counterModal.claim.amount)}) · awaiting customer response.`,
+      })
+      .eq('id', counterModal.claim.id);
     setCounterModal(null);
+    load();
   };
 
-  const rejectClaim = (id: string) => {
-    setClaims((prev) =>
-      prev.map((c) =>
-        c.id === id
-          ? {
-              ...c,
-              status: 'rejected',
-              resolvedNote: 'Rejected — reason logged for vendor review.',
-            }
-          : c
-      )
-    );
+  const rejectClaim = async (id: string) => {
+    await supabase
+      .from('credit_claims')
+      .update({
+        status: 'rejected',
+        resolved_note: 'Rejected — reason logged for vendor review.',
+      })
+      .eq('id', id);
+    load();
   };
 
-  const submitClaim = () => {
+  const submitClaim = async () => {
     if (!form.customer || !form.reason || !form.amount) return;
-    const newClaim: Claim = {
-      id: 'CR-' + (Math.floor(Math.random() * 900) + 100),
-      customer: form.customer,
-      order: form.order || '—',
-      lot: form.lot || '—',
-      boxes: form.boxes || '—',
-      species: '—',
+    await supabase.from('credit_claims').insert({
+      boxes: form.boxes || null,
       reason: form.reason,
-      claimedBy: form.customer,
-      date: 'Jun 26',
-      amount: -Math.abs(parseFloat(form.amount) || 0),
+      claimed_by: form.customer,
+      amount: Math.abs(parseFloat(form.amount) || 0),
       status: 'open',
-      salesRep: form.salesRep || 'Blanca',
-    };
-    setClaims((prev) => [newClaim, ...prev]);
+      sales_rep: form.salesRep || 'Blanca',
+    });
     setForm({ customer: '', order: '', lot: '', boxes: '', reason: '', amount: '', salesRep: '' });
     setDrawerOpen(false);
+    load();
   };
 
   const open = claims.filter((c) => c.status === 'open');
@@ -535,6 +545,26 @@ export default function CreditsPage() {
               <div
                 style={{ display: 'flex', flexDirection: 'column', gap: '11px', maxWidth: '960px' }}
               >
+                {loading && (
+                  <div style={{ fontSize: '13px', color: '#8A99A3', padding: '4px 2px' }}>
+                    Loading claims…
+                  </div>
+                )}
+                {!loading && claims.length === 0 && (
+                  <div
+                    style={{
+                      background: '#fff',
+                      border: '1px solid #E2E6E9',
+                      borderRadius: '8px',
+                      padding: '28px',
+                      textAlign: 'center',
+                      fontSize: '13px',
+                      color: '#8A99A3',
+                    }}
+                  >
+                    No credit claims yet. Customer-submitted claims will appear here.
+                  </div>
+                )}
                 {claims.map((c) => {
                   const m = claimStatusMeta(c.status);
                   const isOpen = c.status === 'open';
@@ -635,14 +665,68 @@ export default function CreditsPage() {
                                 flexWrap: 'wrap',
                               }}
                             >
-                              <span>{c.id}</span>
+                              <span>{c.ref}</span>
                               <span>{c.order}</span>
                               <span>
-                                {c.lot} · {c.boxes}
+                                {c.species}
+                                {c.boxes !== '—' ? ` · Box ${c.boxes}` : ''}
+                                {c.weightLb != null ? ` · ${c.weightLb} lb` : ''}
                               </span>
                               <span>Rep: {c.salesRep}</span>
                               <span>{c.date}</span>
                             </div>
+                            {c.photoPaths.length > 0 && (
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  gap: '8px',
+                                  marginTop: '10px',
+                                  flexWrap: 'wrap',
+                                }}
+                              >
+                                {c.photoPaths.map((p) =>
+                                  photoUrls[p] ? (
+                                    <a
+                                      key={p}
+                                      href={photoUrls[p]}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      style={{ display: 'block', lineHeight: 0 }}
+                                    >
+                                      <img
+                                        src={photoUrls[p]}
+                                        alt="Claim evidence"
+                                        style={{
+                                          width: '58px',
+                                          height: '58px',
+                                          objectFit: 'cover',
+                                          borderRadius: '5px',
+                                          border: '1px solid #E2E6E9',
+                                        }}
+                                      />
+                                    </a>
+                                  ) : (
+                                    <div
+                                      key={p}
+                                      style={{
+                                        width: '58px',
+                                        height: '58px',
+                                        borderRadius: '5px',
+                                        border: '1px solid #E2E6E9',
+                                        background: '#F4F5F6',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        fontSize: '9px',
+                                        color: '#8A99A3',
+                                      }}
+                                    >
+                                      photo
+                                    </div>
+                                  )
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
                         <div style={{ textAlign: 'right', flex: 'none' }}>

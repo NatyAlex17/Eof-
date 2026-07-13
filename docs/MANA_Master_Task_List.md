@@ -21,7 +21,7 @@ Two full-stack developers, working in parallel. Phases are dependency-ordered; w
 - [ ] ⚡ **Get real sample files** — vendor commercial invoice, packing list, the PO Excel from the current paid tool (2–3 each). Parsers build against real files. — Both
 - [ ] ⚡ **Confirm variance tolerances** — ~1 lb / 2% weight, ~$0.05 / 2% rate. — B + finance
 - [ ] ⚡🆕 **Fresho API / email tap** — investigate whether TFK's PO emails can flow directly into MANA (Fresho API, or tap the shared inbox). TFK is ~50–60% of order volume. — B
-- [ ] ⚡🆕 **Approve the two external roles** — vendor + customer portals (see Phase 8). Confirmed "not yet scoped" by Erdolo; needs written sign-off before building. — Both + Blake
+- [x] ✅🆕 **Approve the two external roles** — vendor + customer portals **approved and built (MVP)**. See Phase 8 and `MANA_Delivered_July.md`. — Both + Blake
 
 ---
 
@@ -47,8 +47,8 @@ These override earlier assumptions baked into the plan:
 - [x] ✅ Vercel deploy
 - [x] ✅ Admin SKU catalog + per-species-per-tier pricing (live on DB)
 - [ ] ⚡ Run `20260707100001_sku_pricing.sql` (base price + description + tier_species_prices) before demoing Admin prices
-- [ ] 🆕 **Schema v3/v4 migration** — apply the finance-analysis DDL: shipments, documents, vendor_invoices(+lines), ap_bills/payments/aging, purchase_order_lines, invoice_lines, sku_entity_codes, qbo_object_links, box logistics columns (trucker, pickup_at, origin, freight_mode, gross_weight, pieces), `operating_entity` enum. — B
-- [ ] 🔨 **Profile context** — Nav shows real logged-in user (name/role/initials); viewer role hides admin nav — A
+- [x] ✅🆕 **Schema v3 applied** — shipments, documents, vendor_invoices(+lines), ap_bills/payments/aging, purchase_order_lines, invoice_lines, sku_entity_codes, qbo_object_links, `operating_entity` enum (`20260710120001`). v4 box-logistics columns (trucker, pickup_at, origin, gross_weight, pieces) still draft. — B
+- [x] ✅🔨 **Profile context** — Nav shows the real logged-in user (name/role/initials) — A
 - [ ] 🔨 **QBO application** — submit for production keys today (3–5 day approval); build on sandbox — B
 - [ ] 🔨 **Google Cloud** — OAuth consent, Gmail API, credentials stored — B
 - [ ] 🆕 **Inngest project** (if adopted) — durable workflow scaffolding, secrets — B
@@ -64,13 +64,13 @@ These override earlier assumptions baked into the plan:
 - [ ] 🔨 **Realtime board** — two users see each other's assignments without refresh
 - [ ] 🔨 **Split / merge on DB** — persist via data-layer mutations; locked contents can't be edited
 - [ ] 🔨 **Availability strip** — live available / allocated / incoming per species (excludes direct-routed stock)
-- [ ] 🆕 **Orders page on DB** — the central order record (built UI) reads `orders`/`order_lines`; entered-by + timestamps real
+- [x] ✅🆕 **Orders page on DB** — central order record reads `orders`/`order_lines`; warehouse/direct routing + transport fee + delivery details shown
 - [ ] 🆕 **Versioned allotment locking** — optimistic concurrency (`version_no`) on reservation so two allocators can't reserve the same fish
 
 ### Dev B — Data
 
-- [ ] 🔨 **Customers CRUD** — customers + price_overrides + standing_orders on real tables
-- [ ] 🔨 **Order intake writes** — creates real orders + species lines; new-customer path inserts a customer; pricing from DB, not constants
+- [x] ✅🔨 **Customers CRUD** — customers + price_overrides on real tables; filters (new/unassigned/tier/status/warehouse); tier assignment (admin/ops/sales/finance)
+- [x] ✅🔨 **Order intake writes** — creates real orders + species/grade lines; new-customer path inserts a customer; pricing from DB (not constants)
 - [ ] 🆕 **Price Sheet page reads DB** — species × tier grid + availability from real tables (Admin side already live)
 - [ ] 🆕 **Request → Order separation** — model CustomerRequest (demand) distinct from the committed order/allotment, so demand ≠ reservation ≠ posting (prevents shortage/overstatement drift)
 - [ ] 🆕 **Order Inbox on DB** — the built AI-parse inbox reads real inbound messages; accept → `createOrder`; reject/edit persist
@@ -88,7 +88,7 @@ These override earlier assumptions baked into the plan:
 - [ ] 🔨 **Vendor mappings admin** — per-vendor column maps + species-code dictionary editable, drives import
 - [ ] 🆕 **VendorProductAlias / canonical products** — map raw vendor text ("Large Yellow Fin (Thunnus albacares)", "YF") → canonical species/grade
 - [ ] 🔨 **Server-side import** — upload → parse (CSV + **XLSX**) with mapping → preview → atomic commit RPC; original file kept in Storage
-- [ ] 🆕 **Document inbox** — uploaded + Gmail-pulled files; filename routing (LAX/SFO=warehouse, ORD/HNL=direct); parse-status lifecycle; reprocess
+- [x] ✅🆕 **Document inbox (interim)** — staff `/mana/documents`: vendor submissions with destination routing + parse-status; review → create shipment; generated invoice. Automated Gmail pull + reprocess still to build.
 - [ ] 🆕 **PDF parsing** — text-layer first, LLM structured-extraction fallback with confidence; **mandatory human review, no auto-commit**
 - [ ] 🆕 **Carton-range expander** — `5004, 5005-5009` → box list (dashes, `to`, shorthand, descending, dedupe, span cap)
 - [ ] 🆕 **Incoming lots / pre-sell** — lots can be `incoming` (on the water) and sellable ahead
@@ -187,27 +187,30 @@ These override earlier assumptions baked into the plan:
 
 ---
 
-## Phase 8 — External Portals (🌐 vendor + customer roles · future iteration, client-requested)
+## Phase 8 — External Portals (🌐 vendor + customer roles · ✅ BUILT MVP)
 
-**Blake/Erdolo explicitly asked for these; confirmed "not yet scoped."** They are external, self-service
-users — a separate auth surface, tightly RLS-scoped, **not** additions to the internal staff role dropdown.
-See `MANA_External_Portals_Scope.md` for the full scope. Gated by the Phase-0 role-approval decision.
+**Built and wired to Supabase this cycle.** External, self-service users on a separate auth surface,
+tightly RLS-scoped — not additions to the internal staff role dropdown. Full as-built detail in
+`MANA_Delivered_July.md`; deltas from original scope in `MANA_External_Portals_Scope.md`.
 
-### Customer portal (Erdolo's #1 future ask)
+### Customer portal (Erdolo's #1 future ask) — `/portal`
 
-- [ ] 🌐 **`customer` role** — external login, org-scoped RLS; sees only their own data
-- [ ] 🌐 **Self-service ordering** — order against available inventory at their tier/price; submits a **CustomerRequest** (not a committed order) → lands in the Order Inbox / board for staff confirmation
-- [ ] 🌐 **Customer order history + confirmations** — their orders, statuses, invoices, credits
-- [ ] 🌐 **Customer downgrade submission** — file a claim with photos/weights (feeds the same credit queue)
-- [ ] 🌐 **Hard RLS guard** — never expose other customers, cost, margin, vendors, or the board
+- [x] ✅🌐 **`customer` role** — external login, per-customer RLS; sees only their own data
+- [x] ✅🌐 **Self-service ordering** — order at their tier/price, delivery-or-pickup, delivery address; lands on the staff board/Orders for confirmation (staff route + set transport fee)
+- [x] ✅🌐 **Customer order history + invoices** — their orders, statuses, invoices; price sheet at their tier
+- [x] ✅🌐 **Customer downgrade submission** — file a quality/credit claim (feeds the same credit queue)
+- [x] ✅🌐 **Hard RLS guard** — never other customers, cost, margin, vendors, or the board
+- [ ] 🌐 Photos on downgrade claims (Storage) — not yet
+- [ ] 🌐 CustomerRequest-vs-committed-order separation — orders currently created directly (source='customer'); demand/pre-commit split still open
 
-### Vendor portal (Erdolo's 2nd iteration)
+### Vendor portal (Erdolo's 2nd iteration) — `/vendor`
 
-- [ ] 🌐 **`vendor` role** — external login, vendor-scoped RLS
-- [ ] 🌐 **Direct packing-list / invoice upload** — vendor uploads their own docs (ingestion pipeline pointed at a logged-in vendor instead of Gmail)
-- [ ] 🌐 **Vendor settlement view** — their own settlement statements / credit notes
-- [ ] 🌐 **Hard RLS guard** — **never** revenue, sell prices, margin, customer names, or other vendors
-- [ ] 🌐 **Standardized templates (interim)** — ship a common packing-list/invoice template vendors adopt before the portal is live (Blanca confirmed vendors will use one)
+- [x] ✅🌐 **`vendor` role** — external login, vendor-scoped RLS
+- [x] ✅🌐 **Verification gate** — self-signup starts `pending`; cannot submit until staff verify (RLS-enforced); admin page `/mana/vendor-verification`
+- [x] ✅🌐 **Packing-list submission = structured form** (no parsing); vendors no longer send invoices — the system generates a watermarked commercial invoice/packing list
+- [x] ✅🌐 **Vendor shipments/lots + settlement view** — read-only, their own only
+- [x] ✅🌐 **Hard RLS guard** — never revenue, sell prices, margin, customer names, or other vendors
+- [x] ✅🌐 **Staff Documents Inbox** (`/mana/documents`) — review submissions → owner/staff create the shipment; generated professional invoice
 
 ---
 
@@ -233,6 +236,16 @@ Sheet (tier grid, availability, add-species), Orders page (central record + date
 SKU catalog live, per-species-per-tier pricing live). Database schema v1+v2, auth, typed data layer, ADR,
 Vercel deploy.
 
+### Delivered this cycle (July) — see `MANA_Delivered_July.md` for detail
+
+Roles registry + custom roles + admin add-user (generated password) + self password change · order intake
+**wired to DB** with species+grade (C2 fix) · delivery-vs-pickup + staff transport fee · Orders-page
+warehouse/direct routing + "unassigned" filter · Customers page on DB + filters + tier assignment ·
+**Customer portal** (signup, tier-gated pricing, order/history/invoices/claims/settings, per-customer RLS) ·
+**Vendor portal** (signup, verification gate, structured packing-list form, shipments/settlements, vendor RLS) ·
+staff **Vendor Verification** + **Documents Inbox** + system-generated watermarked invoice · schema v3 applied ·
+external-role RLS isolation (closed the v3 `using(true)` leaks). 9 new migrations (`20260710100001`–`20260711100003`).
+
 ---
 
 ## Naming glossary (handover doc ↔ our schema)
@@ -244,8 +257,8 @@ Vercel deploy.
 | SalesOrder / SalesOrderLine                                                      | `orders` / `order_lines`                                               |
 | CustomerRequest                                                                  | 🆕 to add (demand, pre-commit)                                         |
 | AllotmentSession / AllotmentLine                                                 | allocation board + `board_locks` + content assignment (add versioning) |
-| VendorInvoice / VendorInvoiceLine                                                | 🆕 v4                                                                  |
-| VendorCostLink                                                                   | 🆕 v4 (line↔box)                                                       |
+| VendorInvoice / VendorInvoiceLine                                                | `vendor_invoices` (+ lines) ✅ v3                                      |
+| VendorCostLink                                                                   | `vendor_invoice_line_boxes` ✅ v3                                      |
 | ProductVariant / VendorProductAlias                                              | `skus` / `vendor_species_codes` (upgrade)                              |
-| QBOSyncRecord                                                                    | `qbo_object_links` 🆕                                                  |
+| QBOSyncRecord                                                                    | `qbo_object_links` ✅ v3                                               |
 | WarehousePartner, VendorSettlementPolicy, SupplierCreditNote, ExceptionQueueItem | 🆕 to add                                                              |

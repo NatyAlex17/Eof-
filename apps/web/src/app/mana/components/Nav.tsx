@@ -13,6 +13,7 @@ type NavPage =
   | 'inventory'
   | 'customers'
   | 'pickslip'
+  | 'documents'
   | 'pricesheet'
   | 'po'
   | 'finance'
@@ -22,6 +23,7 @@ type NavPage =
   | 'findash'
   | 'dashboard'
   | 'notifications'
+  | 'vendorverify'
   | 'settings'
   | 'admin';
 
@@ -71,6 +73,7 @@ export default function Nav() {
     if (pathname.includes('/inventory')) return 'inventory';
     if (pathname.includes('/customers')) return 'customers';
     if (pathname.includes('/pick-slips')) return 'pickslip';
+    if (pathname.includes('/documents')) return 'documents';
     if (pathname.includes('/price-sheet')) return 'pricesheet';
     if (pathname.includes('/purchase-orders')) return 'po';
     if (pathname.includes('/finance-queue')) return 'finance';
@@ -80,6 +83,7 @@ export default function Nav() {
     if (pathname.includes('/finance-dashboard')) return 'findash';
     if (pathname.includes('/ceo-dashboard')) return 'dashboard';
     if (pathname.includes('/notifications')) return 'notifications';
+    if (pathname.includes('/vendor-verification')) return 'vendorverify';
     if (pathname.includes('/settings')) return 'settings';
     if (pathname.includes('/admin')) return 'admin';
     return 'board';
@@ -313,6 +317,23 @@ export default function Nav() {
           </svg>
           <span>Pick Slips</span>
         </Link>
+        <Link href="/mana/documents" style={getLinkStyle('documents')}>
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M6 2.5h9l4 4V21.5H6z" />
+            <path d="M15 2.5v4h4" />
+            <path d="M9 13l2 2 4-4" />
+          </svg>
+          <span>Documents Inbox</span>
+        </Link>
 
         <div
           style={{
@@ -509,6 +530,22 @@ export default function Nav() {
             <path d="M13.7 21a2 2 0 01-3.4 0" />
           </svg>
           <span>Notifications</span>
+        </Link>
+        <Link href="/mana/vendor-verification" style={getLinkStyle('vendorverify')}>
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M12 2.5l7.5 3v5c0 4.6-3.1 8.4-7.5 9.5-4.4-1.1-7.5-4.9-7.5-9.5v-5z" />
+            <path d="M9 12l2 2 4-4" />
+          </svg>
+          <span>Vendor Verification</span>
         </Link>
         <Link href="/mana/settings" style={getLinkStyle('settings')}>
           <svg

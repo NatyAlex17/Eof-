@@ -49,3 +49,29 @@ Rules that follow:
   `src/lib/data/`. Three small steps, same PR.
 - The empty NestJS starter stays dormant until Week 4 (QBO retry worker is its
   first real job). Don't build controllers before then.
+
+---
+
+## Addendum (July) — external roles, RLS isolation, generated documents
+
+Decisions taken while building the customer + vendor portals:
+
+- **Roles are data, not just an enum.** A `roles` table backs the UI (labels/colours/
+  descriptions) and an admin-only `add_role()` RPC extends the `user_role` enum so custom
+  roles are assignable. `customer` and `vendor` were added as external roles.
+- **External-role isolation via SECURITY DEFINER helpers.** `app_customer_id()`,
+  `app_vendor_id()`, `app_vendor_verified()` mirror `app_role()` and are used inside RLS
+  policies to scope external users to their own rows without recursion. A freshly-added enum
+  value can't be used as an enum literal in the same transaction, so policy checks compare
+  `app_role()::text`.
+- **Deny-by-default for external roles.** Every broad `using(true)` read policy (including the
+  schema-v3 finance tables) was rewritten so `customer`/`vendor` are excluded and granted only
+  their own scoped rows. New internal tables MUST follow this — never ship `using(true)`.
+- **Vendor packing lists are structured form entry, not parsing.** Vendor PDFs aren't
+  standardized, so verified vendors key lines into a form → `documents.parsed_payload`
+  (no file; `storage_path` made nullable). Staff review then create the shipment.
+- **System-generated documents.** Commercial invoice / packing list is generated from the
+  vendor's structured data as a print-to-PDF page (`/mana/documents/[id]/invoice`) — no
+  server PDF service; the browser's print is the PDF export.
+- **Private storage per vendor.** `vendor-docs` bucket; storage RLS confines a vendor to its
+  own `{vendor_id}/…` folder; staff read all.
