@@ -649,7 +649,6 @@ export default function AllocationBoardPage() {
                         key={box.id}
                         onClick={() => {
                           if (selectedOrderId) {
-                            const _boxWithLot = { ...box };
                             // In a real app, this would update state
                           }
                         }}
