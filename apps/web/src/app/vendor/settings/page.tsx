@@ -82,6 +82,7 @@ export default function VendorSettings() {
   return (
     <>
       <header
+        className="r-header"
         style={{
           flex: 'none',
           display: 'flex',
@@ -97,7 +98,7 @@ export default function VendorSettings() {
         </span>
       </header>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '26px 28px' }}>
+      <div className="r-pad" style={{ flex: 1, overflowY: 'auto', padding: '26px 28px' }}>
         <div style={{ maxWidth: '560px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
           <div
             style={{
@@ -120,7 +121,10 @@ export default function VendorSettings() {
             >
               {account?.email}
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+            <div
+              className="r-grid1"
+              style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}
+            >
               <div>
                 <div style={label}>VENDOR CODE</div>
                 <div style={{ fontSize: '13px', fontFamily: "'IBM Plex Mono', monospace" }}>

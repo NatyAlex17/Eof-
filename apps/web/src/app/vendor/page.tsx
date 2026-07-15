@@ -77,6 +77,7 @@ export default function VendorDashboard() {
   return (
     <>
       <header
+        className="r-header"
         style={{
           flex: 'none',
           display: 'flex',
@@ -110,7 +111,7 @@ export default function VendorDashboard() {
         )}
       </header>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
+      <div className="r-pad" style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
         <div style={{ maxWidth: '960px' }}>
           {/* VERIFICATION STATUS — gates document submission */}
           {!loading && status !== 'verified' && (
@@ -167,6 +168,7 @@ export default function VendorDashboard() {
             </div>
           )}
           <div
+            className="r-grid2"
             style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(4, 1fr)',
@@ -210,6 +212,7 @@ export default function VendorDashboard() {
           </div>
 
           <div
+            className="r-table"
             style={{
               background: '#fff',
               border: '1px solid #E2E6E9',

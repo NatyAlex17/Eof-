@@ -173,6 +173,7 @@ export default function PortalOrderPage() {
   return (
     <>
       <header
+        className="r-header"
         style={{
           flex: 'none',
           display: 'flex',
@@ -189,7 +190,7 @@ export default function PortalOrderPage() {
         </span>
       </header>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
+      <div className="r-pad" style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
         {cat && !hasPricing && !doneCode && (
           <div
             style={{
@@ -300,6 +301,7 @@ export default function PortalOrderPage() {
           </div>
         ) : (
           <div
+            className="r-stack"
             style={{ display: 'flex', gap: '28px', maxWidth: '1000px', alignItems: 'flex-start' }}
           >
             {/* left: pick items */}
@@ -641,7 +643,10 @@ export default function PortalOrderPage() {
             </div>
 
             {/* right: summary */}
-            <div style={{ width: '320px', flex: 'none', position: 'sticky', top: 0 }}>
+            <div
+              className="r-full r-static"
+              style={{ width: '320px', flex: 'none', position: 'sticky', top: 0 }}
+            >
               <div
                 style={{
                   background: '#fff',

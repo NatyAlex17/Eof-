@@ -14,6 +14,7 @@ export default function PortalPriceSheet() {
   return (
     <>
       <header
+        className="r-header"
         style={{
           flex: 'none',
           display: 'flex',
@@ -33,7 +34,7 @@ export default function PortalPriceSheet() {
         )}
       </header>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
+      <div className="r-pad" style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
         {cat && !cat.hasPricing ? (
           <div
             style={{

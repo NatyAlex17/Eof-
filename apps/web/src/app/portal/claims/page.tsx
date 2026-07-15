@@ -142,6 +142,7 @@ export default function PortalClaims() {
   return (
     <>
       <header
+        className="r-header"
         style={{
           flex: 'none',
           display: 'flex',
@@ -159,10 +160,14 @@ export default function PortalClaims() {
         <span style={{ fontSize: '12px', color: '#8A99A3' }}>Report a quality or weight issue</span>
       </header>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
-        <div style={{ display: 'flex', gap: '24px', maxWidth: '960px', alignItems: 'flex-start' }}>
+      <div className="r-pad" style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
+        <div
+          className="r-stack"
+          style={{ display: 'flex', gap: '24px', maxWidth: '960px', alignItems: 'flex-start' }}
+        >
           {/* form */}
           <div
+            className="r-full"
             style={{
               width: '380px',
               flex: 'none',
