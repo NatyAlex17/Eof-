@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 
@@ -51,7 +52,7 @@ export default function SignupPage() {
     });
     setLoading(false);
     if (authErr) {
-      router.push('/login');
+      router.push('/login/customer');
       return;
     }
     router.push('/portal');
@@ -104,7 +105,7 @@ export default function SignupPage() {
           <img
             src="/logo.png"
             alt="MANA Seafood"
-            style={{ width: '170px', height: 'auto', display: 'block' }}
+            style={{ width: '240px', height: 'auto', display: 'block' }}
           />
           <div
             style={{ fontSize: '10px', fontWeight: 600, letterSpacing: '0.22em', color: '#8A99A3' }}
@@ -225,9 +226,12 @@ export default function SignupPage() {
 
         <p style={{ textAlign: 'center', fontSize: '13px', color: '#5A6670', marginTop: '20px' }}>
           Already have an account?{' '}
-          <a href="/login" style={{ color: '#3F6F86', fontWeight: 600, textDecoration: 'none' }}>
+          <Link
+            href="/login/customer"
+            style={{ color: '#3F6F86', fontWeight: 600, textDecoration: 'none' }}
+          >
             Sign in
-          </a>
+          </Link>
         </p>
       </div>
     </div>
