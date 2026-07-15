@@ -29,7 +29,7 @@ export default function VendorNav({ onNavigate }: { onNavigate?: () => void }) {
   const signOut = async () => {
     const supabase = createClient();
     await supabase.auth.signOut();
-    router.push('/login');
+    router.push('/login/vendor');
   };
 
   const active = (): VendorPage => {
