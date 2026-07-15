@@ -3,13 +3,14 @@
 import { useState, useEffect } from 'react';
 import Nav from '../components/Nav';
 import { createClient } from '@/lib/supabase/client';
+import { PAGE_REGISTRY } from '@/lib/access';
 import type { Database } from '@/lib/database.types';
 
 // Roles can be added at runtime (extends the enum), so the generated enum type
 // is a subset. Cast writes through this alias where a role string is stored.
 type RoleValue = Database['public']['Enums']['user_role'];
 
-type AdminTab = 'users' | 'sku' | 'pricing' | 'mappings' | 'integrations';
+type AdminTab = 'users' | 'sku' | 'pricing' | 'access' | 'mappings' | 'integrations';
 
 interface Profile {
   id: string;
@@ -140,6 +141,14 @@ export default function AdminPage() {
   const supabase = createClient();
   const [tab, setTab] = useState<AdminTab>('users');
 
+  // Owner (CEO) — the only user who can assign roles or edit page access.
+  const [isOwner, setIsOwner] = useState(false);
+
+  // Page access matrix: role -> set of allowed page keys.
+  const [pageAccess, setPageAccess] = useState<Record<string, Set<string>>>({});
+  const [accessLoading, setAccessLoading] = useState(true);
+  const [accessError, setAccessError] = useState('');
+
   // Users
   const [users, setUsers] = useState<Profile[]>([]);
   const [usersLoading, setUsersLoading] = useState(true);
@@ -166,7 +175,10 @@ export default function AdminPage() {
 
   // Roles registry (DB-backed; falls back to the 6 built-ins until it loads)
   const [roleDefs, setRoleDefs] = useState<RoleDef[]>(DEFAULT_ROLES);
-  const ROLES = roleDefs.map((r) => r.key);
+  // 'customer' and 'vendor' are registered here only so their portal accounts
+  // get a label/color in the Users list — they're external accounts created
+  // via self-signup, never assignable from the staff role picker.
+  const ROLES = roleDefs.map((r) => r.key).filter((k) => k !== 'customer' && k !== 'vendor');
   const roleMeta = (r: string) => {
     const found = roleDefs.find((d) => d.key === r);
     return (
@@ -411,15 +423,69 @@ export default function AdminPage() {
     fetchRoles();
     fetchSkus();
     fetchTiers();
+    fetchOwnerAndAccess();
     fetchTierPrices();
   }, []);
 
   async function fetchUsers() {
     setUsersLoading(true);
-    const { data } = await supabase.from('profiles').select('*').order('created_at');
+    // Staff only — customer/vendor portal accounts live in this same table
+    // but are managed via their own signup flows, not the staff roster.
+    const { data } = await supabase
+      .from('profiles')
+      .select('*')
+      .not('role', 'in', '(customer,vendor)')
+      .order('created_at');
     setUsers((data as Profile[]) ?? []);
     setUsersLoading(false);
   }
+
+  async function fetchOwnerAndAccess() {
+    setAccessLoading(true);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) {
+      const { data: me } = await supabase
+        .from('profiles')
+        .select('is_owner')
+        .eq('id', user.id)
+        .maybeSingle();
+      setIsOwner(!!me?.is_owner);
+    }
+    const { data: rows } = await supabase.from('role_page_access').select('role, page_key');
+    const map: Record<string, Set<string>> = {};
+    (rows ?? []).forEach((r) => {
+      (map[r.role] ??= new Set()).add(r.page_key);
+    });
+    setPageAccess(map);
+    setAccessLoading(false);
+  }
+
+  // Owner-only: grant/revoke one page for one role. Optimistic, reverts on error.
+  const toggleAccess = async (role: string, pageKey: string) => {
+    if (!isOwner) return;
+    setAccessError('');
+    const has = pageAccess[role]?.has(pageKey) ?? false;
+    setPageAccess((prev) => {
+      const next = { ...prev, [role]: new Set(prev[role] ?? []) };
+      if (has) next[role].delete(pageKey);
+      else next[role].add(pageKey);
+      return next;
+    });
+    const { error } = has
+      ? await supabase.from('role_page_access').delete().eq('role', role).eq('page_key', pageKey)
+      : await supabase.from('role_page_access').insert({ role, page_key: pageKey });
+    if (error) {
+      setAccessError(error.message);
+      setPageAccess((prev) => {
+        const next = { ...prev, [role]: new Set(prev[role] ?? []) };
+        if (has) next[role].add(pageKey);
+        else next[role].delete(pageKey);
+        return next;
+      });
+    }
+  };
 
   async function fetchRoles() {
     const { data } = await supabase.from('roles').select('*').order('sort');
@@ -508,7 +574,8 @@ export default function AdminPage() {
     const res = await fetch('/api/admin/invite', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(inviteForm),
+      // Non-owners always create viewers; the owner assigns the real role.
+      body: JSON.stringify({ ...inviteForm, role: isOwner ? inviteForm.role : 'viewer' }),
     });
     const body = await res.json().catch(() => ({}));
     setInviting(false);
@@ -611,6 +678,7 @@ export default function AdminPage() {
                   ['users', 'Users & Roles'],
                   ['sku', 'SKU Master'],
                   ['pricing', 'Pricing Tiers'],
+                  ...(isOwner ? [['access', 'Page access'] as [AdminTab, string]] : []),
                   ['mappings', 'Vendor Mappings'],
                   ['integrations', 'Integrations'],
                 ] as [AdminTab, string][]
@@ -624,40 +692,42 @@ export default function AdminPage() {
 
           {tab === 'users' && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <button
-                onClick={() => {
-                  setRoleDefError('');
-                  setRoleModal({ label: '', description: '', paletteIdx: 0 });
-                }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '7px',
-                  fontFamily: "'Archivo', sans-serif",
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  background: '#fff',
-                  color: '#3F6F86',
-                  border: '1px solid #C5D8E2',
-                  borderRadius: '5px',
-                  padding: '9px 14px',
-                  cursor: 'pointer',
-                }}
-              >
-                <svg
-                  width="13"
-                  height="13"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.2"
-                  strokeLinecap="round"
+              {isOwner && (
+                <button
+                  onClick={() => {
+                    setRoleDefError('');
+                    setRoleModal({ label: '', description: '', paletteIdx: 0 });
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '7px',
+                    fontFamily: "'Archivo', sans-serif",
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    background: '#fff',
+                    color: '#3F6F86',
+                    border: '1px solid #C5D8E2',
+                    borderRadius: '5px',
+                    padding: '9px 14px',
+                    cursor: 'pointer',
+                  }}
                 >
-                  <line x1="12" y1="5" x2="12" y2="19" />
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-                Add role
-              </button>
+                  <svg
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                  >
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                  Add role
+                </button>
+              )}
               <button
                 onClick={() => {
                   setCreatedCreds(null);
@@ -814,24 +884,26 @@ export default function AdminPage() {
                       )}
                     </span>
                   ))}
-                  <button
-                    onClick={() => {
-                      setRoleDefError('');
-                      setRoleModal({ label: '', description: '', paletteIdx: 0 });
-                    }}
-                    style={{
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      color: '#8A99A3',
-                      background: 'none',
-                      border: '1px dashed #D6DCE0',
-                      borderRadius: '4px',
-                      padding: '5px 11px',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    + Add role
-                  </button>
+                  {isOwner && (
+                    <button
+                      onClick={() => {
+                        setRoleDefError('');
+                        setRoleModal({ label: '', description: '', paletteIdx: 0 });
+                      }}
+                      style={{
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        color: '#8A99A3',
+                        background: 'none',
+                        border: '1px dashed #D6DCE0',
+                        borderRadius: '4px',
+                        padding: '5px 11px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      + Add role
+                    </button>
+                  )}
                 </div>
               </div>
               <div
@@ -946,22 +1018,31 @@ export default function AdminPage() {
                           {formatLastSeen(u.last_seen)}
                         </span>
                         <span style={{ textAlign: 'right' }}>
-                          <button
-                            onClick={() => openAssign(u.id)}
-                            style={{
-                              fontFamily: "'Archivo', sans-serif",
-                              fontSize: '12px',
-                              fontWeight: 600,
-                              background: '#fff',
-                              color: '#3F6F86',
-                              border: '1px solid #C5D8E2',
-                              borderRadius: '5px',
-                              padding: '6px 12px',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            Assign role
-                          </button>
+                          {isOwner ? (
+                            <button
+                              onClick={() => openAssign(u.id)}
+                              style={{
+                                fontFamily: "'Archivo', sans-serif",
+                                fontSize: '12px',
+                                fontWeight: 600,
+                                background: '#fff',
+                                color: '#3F6F86',
+                                border: '1px solid #C5D8E2',
+                                borderRadius: '5px',
+                                padding: '6px 12px',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              Assign role
+                            </button>
+                          ) : (
+                            <span
+                              title="Only the owner can assign roles"
+                              style={{ fontSize: '11px', color: '#8A99A3' }}
+                            >
+                              Owner only
+                            </span>
+                          )}
                         </span>
                       </div>
                     );
@@ -1528,6 +1609,136 @@ export default function AdminPage() {
                   </div>
                 ))
               )}
+            </div>
+          )}
+
+          {/* PAGE ACCESS TAB — owner-only matrix of what each role can see */}
+          {tab === 'access' && isOwner && (
+            <div style={{ maxWidth: '1100px' }}>
+              <div style={{ marginBottom: '14px', fontSize: '13px', color: '#5A6670' }}>
+                Choose which pages each role can see. Changes apply the next time that person loads
+                a page. You (the owner) always see everything.
+              </div>
+              {accessError && (
+                <div
+                  style={{
+                    marginBottom: '12px',
+                    background: '#FBF0EF',
+                    border: '1px solid #E3B6B1',
+                    borderRadius: '5px',
+                    padding: '9px 13px',
+                    fontSize: '12px',
+                    color: '#A5362C',
+                  }}
+                >
+                  {accessError}
+                </div>
+              )}
+              <div
+                style={{
+                  background: '#fff',
+                  border: '1px solid #E2E6E9',
+                  borderRadius: '8px',
+                  overflow: 'auto',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: `220px repeat(${roleDefs.filter((r) => !['customer', 'vendor'].includes(r.key)).length}, 1fr)`,
+                    padding: '11px 18px',
+                    background: '#FAFBFB',
+                    borderBottom: '1px solid #E2E6E9',
+                    fontSize: '10px',
+                    fontWeight: 700,
+                    letterSpacing: '0.07em',
+                    color: '#8A99A3',
+                    gap: '8px',
+                  }}
+                >
+                  <span>PAGE</span>
+                  {roleDefs
+                    .filter((r) => !['customer', 'vendor'].includes(r.key))
+                    .map((r) => (
+                      <span key={r.key} style={{ textAlign: 'center', color: r.color }}>
+                        {r.label.toUpperCase()}
+                      </span>
+                    ))}
+                </div>
+                {accessLoading ? (
+                  <div style={{ padding: '22px 18px', fontSize: '13px', color: '#8A99A3' }}>
+                    Loading…
+                  </div>
+                ) : (
+                  (['OPERATIONS', 'FINANCE', 'OVERVIEW', 'SYSTEM'] as const).map((group) => (
+                    <div key={group}>
+                      <div
+                        style={{
+                          padding: '9px 18px 5px',
+                          fontFamily: "'IBM Plex Mono', monospace",
+                          fontSize: '9px',
+                          letterSpacing: '0.14em',
+                          color: '#8A99A3',
+                          background: '#FAFBFB',
+                          borderBottom: '1px solid #EDEFF1',
+                        }}
+                      >
+                        {group}
+                      </div>
+                      {PAGE_REGISTRY.filter((p) => p.group === group).map((p) => (
+                        <div
+                          key={p.key}
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns: `220px repeat(${roleDefs.filter((r) => !['customer', 'vendor'].includes(r.key)).length}, 1fr)`,
+                            alignItems: 'center',
+                            padding: '9px 18px',
+                            borderBottom: '1px solid #EDEFF1',
+                            gap: '8px',
+                          }}
+                        >
+                          <span style={{ fontSize: '13px', fontWeight: 500 }}>{p.label}</span>
+                          {roleDefs
+                            .filter((r) => !['customer', 'vendor'].includes(r.key))
+                            .map((r) => {
+                              const on = pageAccess[r.key]?.has(p.key) ?? false;
+                              return (
+                                <span key={r.key} style={{ textAlign: 'center' }}>
+                                  <button
+                                    onClick={() => toggleAccess(r.key, p.key)}
+                                    title={`${r.label} · ${p.label}`}
+                                    style={{
+                                      width: '20px',
+                                      height: '20px',
+                                      borderRadius: '4px',
+                                      border: on ? 'none' : '1.5px solid #D6DCE0',
+                                      background: on ? '#3F6F86' : '#fff',
+                                      color: '#fff',
+                                      fontSize: '12px',
+                                      lineHeight: 1,
+                                      cursor: 'pointer',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                    }}
+                                  >
+                                    {on ? '✓' : ''}
+                                  </button>
+                                </span>
+                              );
+                            })}
+                        </div>
+                      ))}
+                    </div>
+                  ))
+                )}
+              </div>
+              <div
+                style={{ fontSize: '11px', color: '#8A99A3', marginTop: '10px', lineHeight: 1.5 }}
+              >
+                Settings stays available to everyone (people manage their own account there). A role
+                with no pages ticked falls back to full access until you configure it.
+              </div>
             </div>
           )}
 
@@ -2145,17 +2356,30 @@ export default function AdminPage() {
                   </div>
                   <div>
                     <label style={labelStyle}>ROLE</label>
-                    <select
-                      style={inputStyle}
-                      value={inviteForm.role}
-                      onChange={(e) => setInviteForm((f) => ({ ...f, role: e.target.value }))}
-                    >
-                      {ROLES.map((r) => (
-                        <option key={r} value={r}>
-                          {roleMeta(r).label}
-                        </option>
-                      ))}
-                    </select>
+                    {isOwner ? (
+                      <select
+                        style={inputStyle}
+                        value={inviteForm.role}
+                        onChange={(e) => setInviteForm((f) => ({ ...f, role: e.target.value }))}
+                      >
+                        {ROLES.map((r) => (
+                          <option key={r} value={r}>
+                            {roleMeta(r).label}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div
+                        style={{
+                          ...inputStyle,
+                          background: '#F4F5F6',
+                          color: '#8A99A3',
+                          cursor: 'default',
+                        }}
+                      >
+                        Viewer — the owner assigns the final role
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label style={labelStyle}>LOCATION</label>

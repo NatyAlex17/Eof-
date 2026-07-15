@@ -48,6 +48,7 @@ export default function PortalOrdersPage() {
   return (
     <>
       <header
+        className="r-header"
         style={{
           flex: 'none',
           display: 'flex',
@@ -78,7 +79,7 @@ export default function PortalOrdersPage() {
         </Link>
       </header>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
+      <div className="r-pad" style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
         <div style={{ maxWidth: '900px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {loading ? (
             <div style={{ fontSize: '13px', color: '#8A99A3' }}>Loading…</div>
@@ -111,6 +112,7 @@ export default function PortalOrdersPage() {
                   }}
                 >
                   <button
+                    className="r-grid2"
                     onClick={() => setOpen(isOpen ? null : o.id)}
                     style={{
                       width: '100%',

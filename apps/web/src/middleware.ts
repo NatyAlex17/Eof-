@@ -31,10 +31,11 @@ export async function middleware(request: NextRequest) {
   const isPortal = path.startsWith('/portal');
   const isVendor = path.startsWith('/vendor') && !path.startsWith('/vendor-signup');
 
-  // Unauthenticated users can't reach any protected area.
+  // Unauthenticated users can't reach any protected area — each area has its
+  // own sign-in door.
   if (!user && (isMana || isPortal || isVendor)) {
     const url = request.nextUrl.clone();
-    url.pathname = '/login';
+    url.pathname = isPortal ? '/login/customer' : isVendor ? '/login/vendor' : '/login';
     return NextResponse.redirect(url);
   }
 

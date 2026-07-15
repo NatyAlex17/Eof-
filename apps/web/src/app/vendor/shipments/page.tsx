@@ -62,6 +62,7 @@ export default function VendorShipmentsPage() {
   return (
     <>
       <header
+        className="r-header"
         style={{
           flex: 'none',
           display: 'flex',
@@ -79,10 +80,11 @@ export default function VendorShipmentsPage() {
         <span style={{ fontSize: '12px', color: '#8A99A3' }}>Your product with us</span>
       </header>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
+      <div className="r-pad" style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
         <div style={{ maxWidth: '900px', display: 'flex', flexDirection: 'column', gap: '22px' }}>
           {/* SHIPMENTS */}
           <div
+            className="r-table"
             style={{
               background: '#fff',
               border: '1px solid #E2E6E9',
@@ -173,6 +175,7 @@ export default function VendorShipmentsPage() {
 
           {/* LOTS */}
           <div
+            className="r-table"
             style={{
               background: '#fff',
               border: '1px solid #E2E6E9',

@@ -66,6 +66,7 @@ export default function VendorDocumentsPage() {
   return (
     <>
       <header
+        className="r-header"
         style={{
           flex: 'none',
           display: 'flex',
@@ -96,7 +97,7 @@ export default function VendorDocumentsPage() {
         </Link>
       </header>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
+      <div className="r-pad" style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
         <div style={{ maxWidth: '900px' }}>
           <div
             style={{
@@ -124,6 +125,7 @@ export default function VendorDocumentsPage() {
           </div>
 
           <div
+            className="r-table"
             style={{
               background: '#fff',
               border: '1px solid #E2E6E9',
