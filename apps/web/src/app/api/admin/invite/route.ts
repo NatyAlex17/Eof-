@@ -40,7 +40,7 @@ export async function POST(request: Request) {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('role')
+    .select('role, is_owner')
     .eq('id', user.id)
     .single();
 
@@ -48,7 +48,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Admin only' }, { status: 403 });
   }
 
-  const { name, email, role, location } = await request.json();
+  const body = await request.json();
+  const { name, email, location } = body;
+  // Only the owner may pick a role at creation; other admins create viewers
+  // and the owner assigns the real role afterwards.
+  const role = profile.is_owner ? body.role : 'viewer';
   if (!name || !email || !role) {
     return NextResponse.json({ error: 'name, email, and role are required' }, { status: 400 });
   }

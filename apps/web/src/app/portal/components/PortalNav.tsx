@@ -14,7 +14,7 @@ type PortalPage =
   | 'claims'
   | 'settings';
 
-export default function PortalNav() {
+export default function PortalNav({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
   const [me, setMe] = useState<{ name: string } | null>(null);
@@ -155,9 +155,11 @@ export default function PortalNav() {
   return (
     <div
       style={{
-        width: '224px',
+        width: '100%',
+        maxWidth: '248px',
+        minWidth: '224px',
         flex: 'none',
-        height: '100vh',
+        height: '100%',
         background: '#FFFFFF',
         borderRight: '1px solid #E2E6E9',
         display: 'flex',
@@ -214,7 +216,7 @@ export default function PortalNav() {
 
       <nav style={{ flex: 1, overflowY: 'auto', padding: '14px 0' }}>
         {items.map((it) => (
-          <Link key={it.key} href={it.href} style={linkStyle(it.key)}>
+          <Link key={it.key} href={it.href} style={linkStyle(it.key)} onClick={onNavigate}>
             <svg
               width="18"
               height="18"

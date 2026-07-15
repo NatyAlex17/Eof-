@@ -47,6 +47,7 @@ export default function PortalInvoices() {
   return (
     <>
       <header
+        className="r-header"
         style={{
           flex: 'none',
           display: 'flex',
@@ -71,8 +72,9 @@ export default function PortalInvoices() {
         )}
       </header>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
+      <div className="r-pad" style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
         <div
+          className="r-table"
           style={{
             maxWidth: '820px',
             background: '#fff',

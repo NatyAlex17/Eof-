@@ -189,6 +189,7 @@ export default function VendorPackingListPage() {
   return (
     <>
       <header
+        className="r-header"
         style={{
           flex: 'none',
           display: 'flex',
@@ -208,7 +209,7 @@ export default function VendorPackingListPage() {
         </span>
       </header>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
+      <div className="r-pad" style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
         {notVerified ? (
           <div style={{ maxWidth: '560px' }}>
             <div
@@ -386,6 +387,7 @@ export default function VendorPackingListPage() {
 
             {/* shipment header — matches the packing-list top block (PL #, AWB, RCD date) */}
             <div
+              className="r-grid2"
               style={{
                 display: 'grid',
                 gridTemplateColumns: '1fr 1fr 160px 150px',
@@ -476,6 +478,7 @@ export default function VendorPackingListPage() {
               ))}
             </datalist>
             <div
+              className="r-table-lg"
               style={{
                 background: '#fff',
                 border: '1px solid #E2E6E9',

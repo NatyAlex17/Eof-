@@ -1,5 +1,6 @@
 import { Metadata } from 'next';
 import { Archivo, IBM_Plex_Mono, Newsreader } from 'next/font/google';
+import AccessGate from './components/AccessGate';
 import './mana-styles.css';
 
 const archivo = Archivo({
@@ -29,11 +30,7 @@ export const metadata: Metadata = {
   description: 'Professional operations platform for seafood distribution',
 };
 
-export default function ManaLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function ManaLayout({ children }: { children: React.ReactNode }) {
   return (
     <div
       className={`${archivo.variable} ${ibmPlexMono.variable} ${newsreader.variable}`}
@@ -41,7 +38,7 @@ export default function ManaLayout({
         fontFamily: 'var(--font-archivo), sans-serif',
       }}
     >
-      {children}
+      <AccessGate>{children}</AccessGate>
     </div>
   );
 }

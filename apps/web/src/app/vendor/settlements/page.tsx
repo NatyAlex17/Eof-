@@ -59,6 +59,7 @@ export default function VendorSettlementsPage() {
   return (
     <>
       <header
+        className="r-header"
         style={{
           flex: 'none',
           display: 'flex',
@@ -83,7 +84,7 @@ export default function VendorSettlementsPage() {
         )}
       </header>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
+      <div className="r-pad" style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
         <div style={{ maxWidth: '820px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {loading ? (
             <div style={{ fontSize: '13px', color: '#8A99A3' }}>Loading…</div>
@@ -116,6 +117,7 @@ export default function VendorSettlementsPage() {
                   }}
                 >
                   <button
+                    className="r-grid2"
                     onClick={() => setOpen(isOpen ? null : r.id)}
                     style={{
                       width: '100%',

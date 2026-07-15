@@ -1235,6 +1235,7 @@ export type Database = {
           vendor_id: string | null;
           email: string;
           id: string;
+          is_owner: boolean;
           last_seen: string | null;
           location: string | null;
           name: string;
@@ -1247,6 +1248,7 @@ export type Database = {
           vendor_id?: string | null;
           email: string;
           id: string;
+          is_owner?: boolean;
           last_seen?: string | null;
           location?: string | null;
           name?: string;
@@ -1259,6 +1261,7 @@ export type Database = {
           vendor_id?: string | null;
           email?: string;
           id?: string;
+          is_owner?: boolean;
           last_seen?: string | null;
           location?: string | null;
           name?: string;
@@ -1482,6 +1485,27 @@ export type Database = {
           qbo_id?: string;
           qbo_type?: string;
           sync_status?: string;
+        };
+        Relationships: [];
+      };
+      role_page_access: {
+        Row: {
+          created_at: string;
+          id: string;
+          page_key: string;
+          role: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          page_key: string;
+          role: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          page_key?: string;
+          role?: string;
         };
         Relationships: [];
       };
@@ -2295,6 +2319,7 @@ export type Database = {
         };
       };
       app_customer_id: { Args: never; Returns: string };
+      app_is_owner: { Args: never; Returns: boolean };
       app_vendor_id: { Args: never; Returns: string };
       app_vendor_verified: { Args: never; Returns: boolean };
       app_role: {
